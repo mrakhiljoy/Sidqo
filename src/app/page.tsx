@@ -1,228 +1,241 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
-  Scale,
+  ArrowRight,
   MessageSquare,
   FileText,
   Briefcase,
   BookOpen,
   Shield,
+  Scale,
   ChevronRight,
-  Star,
-  CheckCircle,
-  ArrowRight,
-  Gavel,
-  Globe,
-  Clock,
-  Lock,
-  Users,
+  Plus,
   Sparkles,
+  Clock,
+  Globe,
+  Zap,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 
-const legalAreas = [
-  { icon: "👔", title: "Employment Law", desc: "Wrongful termination, EOBI, gratuity, labor disputes" },
-  { icon: "🏢", title: "Business & Commercial", desc: "Company formation, contracts, disputes, licensing" },
-  { icon: "🏠", title: "Real Estate", desc: "Tenancy contracts, RERA, property disputes, Ejari" },
-  { icon: "👨‍👩‍👧", title: "Family Law", desc: "Divorce, custody, alimony, inheritance under UAE law" },
-  { icon: "⚖️", title: "Criminal Defense", desc: "Rights, procedures, bail, court representation" },
-  { icon: "✈️", title: "Immigration & Visas", desc: "Residency, Golden Visa, work permits, status changes" },
-  { icon: "💼", title: "Debt & Finance", desc: "Cheque cases, bank disputes, debt restructuring" },
-  { icon: "🛡️", title: "Consumer Rights", desc: "Fraud protection, product liability, refunds" },
-];
+/* ─── Scroll Reveal Hook ──────────────────────────── */
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
 
-const features = [
-  {
-    icon: MessageSquare,
-    title: "AI Legal Consultation",
-    desc: "Chat with our AI trained on UAE federal laws, DIFC regulations, and local court precedents. Get instant, accurate legal guidance 24/7.",
-    color: "from-blue-500/20 to-blue-600/5",
-    border: "border-blue-500/20",
-    iconColor: "text-blue-400",
-  },
-  {
-    icon: FileText,
-    title: "Legal Document Generator",
-    desc: "Create professional legal memorandums, demand letters, contract templates, and court submissions tailored to UAE legal standards.",
-    color: "from-gold-400/20 to-gold-600/5",
-    border: "border-gold-400/20",
-    iconColor: "text-gold-400",
-  },
-  {
-    icon: Briefcase,
-    title: "Case Strategy Builder",
-    desc: "Get a complete roadmap for your case — evidence checklist, timeline, legal arguments, and step-by-step action plan.",
-    color: "from-emerald-500/20 to-emerald-600/5",
-    border: "border-emerald-500/20",
-    iconColor: "text-emerald-400",
-  },
-  {
-    icon: BookOpen,
-    title: "Know Your Rights",
-    desc: "Instantly understand your rights in any situation. Employment termination, tenant rights, arrest procedures, consumer protections.",
-    color: "from-purple-500/20 to-purple-600/5",
-    border: "border-purple-500/20",
-    iconColor: "text-purple-400",
-  },
-];
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.classList.add("visible");
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-const stats = [
-  { value: "1,500+", label: "UAE Laws Covered" },
-  { value: "24/7", label: "Always Available" },
-  { value: "6", label: "Emirates Supported" },
-  { value: "< 10s", label: "Response Time" },
-];
+  return ref;
+}
 
-const testimonials = [
-  {
-    text: "Sidqo helped me understand my rights when my employer wrongfully terminated me. The step-by-step guidance was incredibly clear.",
-    name: "Ahmed Al-Rashidi",
-    role: "IT Professional, Dubai",
-    rating: 5,
-  },
-  {
-    text: "Generated a complete legal memorandum for my tenancy dispute in minutes. Saved me thousands in lawyer consultation fees.",
-    name: "Sarah Johnson",
-    role: "Expat Resident, Abu Dhabi",
-    rating: 5,
-  },
-  {
-    text: "The case strategy builder laid out exactly what I needed to do for my business dispute. Incredibly thorough and accurate.",
-    name: "Mohammed Al-Khalidi",
-    role: "Business Owner, Sharjah",
-    rating: 5,
-  },
-];
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const ref = useReveal();
+  const delayClass = delay > 0 ? `reveal-delay-${delay}` : "";
+  return (
+    <div ref={ref} className={`reveal ${delayClass} ${className}`}>
+      {children}
+    </div>
+  );
+}
 
-const quickActions = [
-  { label: "Was my termination legal?", href: "/chat?q=termination" },
-  { label: "Tenant rights in UAE", href: "/chat?q=tenant" },
-  { label: "Golden Visa eligibility", href: "/chat?q=golden-visa" },
-  { label: "Start a business in UAE", href: "/chat?q=business" },
-];
+/* ─── Typewriter ──────────────────────────────────── */
+const verbs = ["Navigate", "Understand", "Defend", "Protect"];
 
-export default function HomePage() {
-  const [typedText, setTypedText] = useState("");
-  const phrases = [
-    "Know Your Rights in UAE",
-    "Navigate Complex Legal Cases",
-    "Create Legal Memorandums",
-    "Get Step-by-Step Guidance",
-  ];
-  const [phraseIndex, setPhraseIndex] = useState(0);
+function TypewriterVerb() {
+  const [text, setText] = useState("");
+  const [verbIndex, setVerbIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    const currentPhrase = phrases[phraseIndex];
+    const currentVerb = verbs[verbIndex];
     const timeout = setTimeout(
       () => {
         if (!isDeleting) {
-          setTypedText(currentPhrase.substring(0, charIndex + 1));
+          setText(currentVerb.substring(0, charIndex + 1));
           setCharIndex((c) => c + 1);
-          if (charIndex + 1 === currentPhrase.length) {
-            setTimeout(() => setIsDeleting(true), 2000);
+          if (charIndex + 1 === currentVerb.length) {
+            setTimeout(() => setIsDeleting(true), 2200);
           }
         } else {
-          setTypedText(currentPhrase.substring(0, charIndex - 1));
+          setText(currentVerb.substring(0, charIndex - 1));
           setCharIndex((c) => c - 1);
           if (charIndex - 1 === 0) {
             setIsDeleting(false);
-            setPhraseIndex((p) => (p + 1) % phrases.length);
+            setVerbIndex((p) => (p + 1) % verbs.length);
           }
         }
       },
-      isDeleting ? 40 : 80
+      isDeleting ? 50 : 90
     );
     return () => clearTimeout(timeout);
-  }, [charIndex, isDeleting, phraseIndex]);
+  }, [charIndex, isDeleting, verbIndex]);
 
   return (
+    <span className="gold-text italic">
+      {text}
+      <span className="inline-block w-[2px] h-[0.85em] bg-gold-400 ml-0.5 align-middle animate-pulse" />
+    </span>
+  );
+}
+
+/* ─── FAQ Accordion ───────────────────────────────── */
+const faqs = [
+  {
+    q: "Is Sidqo a law firm?",
+    a: "No. Sidqo is an AI-powered legal information platform for educational purposes. We provide guidance based on UAE federal laws and regulations, but we are not a substitute for licensed legal counsel. For specific legal matters, always consult a qualified UAE attorney.",
+  },
+  {
+    q: "What laws does Sidqo reference?",
+    a: "Sidqo is trained on UAE Federal Decree-Law No. 33 of 2021 (Labour Law), the UAE Civil Code, Penal Code, DIFC and ADGM regulations, MOHRE procedures, RERA tenancy laws, and other key federal and emirate-specific legislation.",
+  },
+  {
+    q: "Is my conversation private?",
+    a: "Yes. We do not store your conversations, share your data with third parties, or use your queries for training. Your legal questions remain completely confidential.",
+  },
+  {
+    q: "Can I use the legal documents in court?",
+    a: "Documents generated by Sidqo are professional templates based on UAE legal standards. While they provide a strong starting point, we recommend having a licensed attorney review any document before official submission or court filing.",
+  },
+  {
+    q: "What if I need a real lawyer?",
+    a: "We're building a vetted lawyer marketplace to connect you with licensed UAE attorneys. In the meantime, Sidqo can help you understand your situation, prepare your case, and know the right questions to ask when you do consult a lawyer.",
+  },
+  {
+    q: "How accurate is the AI's legal guidance?",
+    a: "Sidqo references specific UAE laws and provides citations where possible. However, law is nuanced and fact-specific. Our AI provides general guidance — not legal advice. Always verify critical legal decisions with a qualified professional.",
+  },
+];
+
+function FAQItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="faq-item">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between py-6 px-2 text-left group"
+      >
+        <span className="text-[17px] font-display font-semibold text-white/90 group-hover:text-white transition-colors pr-8">
+          {q}
+        </span>
+        <span
+          className={`faq-toggle text-white/40 group-hover:text-gold-400 flex-shrink-0 transition-all ${
+            open ? "open" : ""
+          }`}
+        >
+          <Plus className="w-5 h-5" />
+        </span>
+      </button>
+      <div className={`faq-content ${open ? "open" : ""}`}>
+        <p className="text-[15px] text-white/50 leading-relaxed px-2 pb-6">
+          {a}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Floating Prompt Chips ───────────────────────── */
+const floatingPrompts = [
+  { text: "My employer hasn't paid me in 3 months", x: "5%", y: "15%", delay: "0s" },
+  { text: "Can my company keep my passport?", x: "55%", y: "5%", delay: "2s" },
+  { text: "Terminated during probation", x: "10%", y: "70%", delay: "1s" },
+  { text: "حقوق نهاية الخدمة", x: "60%", y: "75%", delay: "3s" },
+  { text: "Forced to resign — is that legal?", x: "50%", y: "40%", delay: "1.5s" },
+];
+
+/* ─── Page ────────────────────────────────────────── */
+export default function HomePage() {
+  return (
     <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Background elements */}
-        <div className="absolute inset-0 mesh-bg pattern-overlay" />
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-gold-400/5 blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-navy-400/10 blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-gold-400/3 blur-3xl" />
+      {/* ═══════ HERO ═══════ */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden hero-gradient">
+        {/* Subtle geometric pattern */}
+        <div className="absolute inset-0 geo-pattern opacity-40" />
+
+        {/* Ambient orbs */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full bg-gold-400/[0.04] blur-[120px]" />
+          <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] rounded-full bg-teal-500/[0.03] blur-[100px]" />
         </div>
 
-        {/* Decorative scale icon */}
-        <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-5 hidden xl:block">
-          <Scale className="w-96 h-96 text-gold-400" strokeWidth={0.5} />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
-          <div className="text-center max-w-4xl mx-auto">
+        <div className="relative z-10 max-w-5xl mx-auto px-6 lg:px-8 pt-28 pb-20">
+          <div className="text-center">
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-400/10 border border-gold-400/25 mb-8 animate-fade-in">
+            <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/[0.08] mb-10 animate-fade-in">
               <Sparkles className="w-4 h-4 text-gold-400" />
-              <span className="text-sm text-gold-400 font-medium">UAE's Most Advanced AI Legal Platform</span>
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-sm font-medium text-white/60">
+                AI-Powered Legal Guidance for UAE
+              </span>
+              <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
             </div>
 
-            {/* Main heading */}
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight animate-slide-up">
-              <span className="text-warm-white/95">Your AI Lawyer</span>
+            {/* Headline — the most important typography on the page */}
+            <h1 className="font-display text-display-lg sm:text-display-xl font-bold mb-8 leading-[1.05] animate-slide-up opacity-0">
+              <span className="text-white">Your AI Lawyer</span>
               <br />
-              <span className="text-warm-white/95">to Help You </span>
-              <span className="gold-text inline-block min-w-[14ch] text-left">
-                {typedText}
-                <span className="inline-block w-0.5 h-[1.1em] bg-gold-400 ml-1 align-middle animate-pulse" />
-              </span>
+              <span className="text-white">to Help You </span>
+              <TypewriterVerb />
             </h1>
 
-            <p className="text-lg sm:text-xl text-warm-white/60 mb-10 max-w-2xl mx-auto leading-relaxed animate-slide-up">
-              Navigate UAE law with confidence. Get instant legal guidance, generate professional documents, build case strategies, and understand your rights — powered by advanced AI trained on UAE legislation.
+            {/* Subtitle — one sentence, maximum clarity */}
+            <p className="text-lg sm:text-xl text-white/45 mb-12 max-w-2xl mx-auto leading-relaxed font-body animate-slide-up-delay-1 opacity-0">
+              Get instant legal guidance based on UAE federal law. Generate
+              documents. Build case strategies. Understand your rights.
             </p>
 
-            {/* CTA buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 animate-slide-up">
+            {/* CTA — single, confident, gold pill */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 animate-slide-up-delay-2 opacity-0">
               <Link
                 href="/chat"
-                className="btn-primary flex items-center gap-3 text-base px-8 py-4 rounded-xl group"
+                className="btn-primary flex items-center gap-3 text-[15px] px-8 py-4 group"
               >
-                <MessageSquare className="w-5 h-5" />
+                <MessageSquare className="w-4 h-4" />
                 Talk to AI Lawyer
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
               <Link
                 href="/rights"
-                className="btn-secondary flex items-center gap-3 text-base px-8 py-4 rounded-xl"
+                className="btn-secondary flex items-center gap-3 text-[15px] px-8 py-4"
               >
-                <BookOpen className="w-5 h-5" />
+                <BookOpen className="w-4 h-4" />
                 Know Your Rights
               </Link>
             </div>
 
-            {/* Quick action chips */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
-              <span className="text-xs text-warm-white/30 mr-1">Quick questions:</span>
-              {quickActions.map((action) => (
-                <Link
-                  key={action.label}
-                  href={action.href}
-                  className="text-xs px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-warm-white/50 hover:border-gold-400/40 hover:text-gold-400 transition-all"
-                >
-                  {action.label}
-                </Link>
-              ))}
-            </div>
-
-            {/* Trust badges */}
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-warm-white/40">
+            {/* Trust signals — quiet confidence */}
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-white/30 animate-slide-up-delay-3 opacity-0">
               {[
-                { icon: Shield, text: "UAE Federal Law Compliant" },
-                { icon: Lock, text: "Confidential & Secure" },
+                { icon: Shield, text: "UAE Federal Law" },
                 { icon: Clock, text: "24/7 Available" },
                 { icon: Globe, text: "All 7 Emirates" },
+                { icon: Zap, text: "Instant Responses" },
               ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-gold-400/50" />
+                <div key={text} className="flex items-center gap-2">
+                  <Icon className="w-3.5 h-3.5 text-gold-400/40" />
                   <span>{text}</span>
                 </div>
               ))}
@@ -230,236 +243,435 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-warm-white/20 animate-bounce">
-          <div className="w-px h-8 bg-gradient-to-b from-transparent to-gold-400/30" />
-          <div className="w-1 h-1 rounded-full bg-gold-400/30" />
-        </div>
-      </section>
-
-      {/* Stats Bar */}
-      <section className="border-y border-gold-400/10 bg-navy-700/30 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {stats.map(({ value, label }) => (
-              <div key={label} className="text-center">
-                <div className="text-3xl font-bold gold-text mb-1">{value}</div>
-                <div className="text-sm text-warm-white/50">{label}</div>
-              </div>
-            ))}
+        {/* Scroll hint */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
+          <div className="w-5 h-8 rounded-full border border-white/10 flex items-start justify-center p-1.5">
+            <div className="w-1 h-2 rounded-full bg-white/20 animate-bounce" />
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-24 relative">
-        <div className="absolute inset-0 pattern-overlay opacity-50" />
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-400/10 border border-gold-400/20 mb-4">
-              <Gavel className="w-4 h-4 text-gold-400" />
-              <span className="text-sm text-gold-400 font-medium">Complete Legal Suite</span>
-            </div>
-            <h2 className="text-4xl sm:text-5xl font-bold text-warm-white mb-4">
-              Everything You Need to
-              <span className="gold-text"> Win Your Case</span>
-            </h2>
-            <p className="text-lg text-warm-white/50 max-w-2xl mx-auto">
-              From understanding your rights to building a complete legal strategy — Sidqo guides you through every step.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {features.map(({ icon: Icon, title, desc, color, border, iconColor }) => (
-              <div
-                key={title}
-                className={`glass glass-hover rounded-2xl p-8 bg-gradient-to-br ${color} border ${border}`}
-              >
-                <div className={`w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-5 ${iconColor}`}>
-                  <Icon className="w-6 h-6" />
+      {/* ═══════ SOCIAL PROOF BAR ═══════ */}
+      <section className="border-y border-white/[0.04] bg-surface-1/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10">
+          <Reveal>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+              {[
+                { value: "1,500+", label: "UAE Laws Referenced" },
+                { value: "24/7", label: "Always Available" },
+                { value: "7", label: "Emirates Covered" },
+                { value: "< 10s", label: "Avg. Response Time" },
+              ].map(({ value, label }) => (
+                <div key={label} className="text-center">
+                  <div className="text-2xl sm:text-3xl font-display font-bold gold-text mb-1">
+                    {value}
+                  </div>
+                  <div className="text-sm text-white/40">{label}</div>
                 </div>
-                <h3 className="text-xl font-semibold text-warm-white mb-3">{title}</h3>
-                <p className="text-warm-white/60 leading-relaxed mb-5">{desc}</p>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ═══════ BENTO — PRODUCT SHOWCASE ═══════ */}
+      <section className="py-24 sm:py-32 relative section-gradient">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          {/* Section header */}
+          <Reveal>
+            <div className="text-center mb-16">
+              <p className="text-sm font-semibold text-gold-400 font-display tracking-wide uppercase mb-4">
+                Complete Legal Suite
+              </p>
+              <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white mb-5">
+                Everything you need to{" "}
+                <span className="gold-text italic">win</span> your case
+              </h2>
+              <p className="text-lg text-white/40 max-w-2xl mx-auto">
+                From understanding your rights to building a complete legal
+                strategy — Sidqo guides you every step.
+              </p>
+            </div>
+          </Reveal>
+
+          {/* Bento grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* ── Hero card: AI Chat ── */}
+            <Reveal className="lg:col-span-2 lg:row-span-2">
+              <div className="bento-card h-full p-8 sm:p-10 relative overflow-hidden group">
+                {/* Background glow */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-gold-400/[0.04] blur-[80px] rounded-full" />
+
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-gold-400/10 flex items-center justify-center">
+                      <MessageSquare className="w-5 h-5 text-gold-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-display font-bold text-white text-lg">
+                        AI Legal Consultation
+                      </h3>
+                      <p className="text-sm text-white/40">
+                        Ask anything about UAE law
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mock chat */}
+                  <div className="bg-surface-0/60 rounded-2xl p-5 mb-6 border border-white/[0.04]">
+                    <div className="space-y-4">
+                      <div className="flex gap-3">
+                        <div className="w-7 h-7 rounded-full bg-teal-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-xs text-teal-400">You</span>
+                        </div>
+                        <div className="bg-white/[0.04] rounded-2xl rounded-tl-md px-4 py-3">
+                          <p className="text-sm text-white/70">
+                            My employer hasn't paid my salary for 3 months. What
+                            are my options under UAE law?
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="w-7 h-7 rounded-full bg-gold-400/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Scale className="w-3.5 h-3.5 text-gold-400" />
+                        </div>
+                        <div className="bg-gold-400/[0.04] rounded-2xl rounded-tl-md px-4 py-3 border border-gold-400/10">
+                          <p className="text-sm text-white/60 leading-relaxed">
+                            Under <strong className="text-gold-400">Federal Decree-Law No. 33 of 2021</strong>,
+                            you have several strong protections. Your employer is violating the{" "}
+                            <strong className="text-gold-400">Wage Protection System (WPS)</strong>.
+                            Here are your immediate options...
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floating prompt chips */}
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Wrongful termination",
+                      "Gratuity calculation",
+                      "Visa cancellation",
+                      "Labour complaint",
+                    ].map((prompt) => (
+                      <Link
+                        key={prompt}
+                        href="/chat"
+                        className="prompt-chip text-xs"
+                      >
+                        {prompt}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Arrow link */}
                 <Link
-                  href={title === "AI Legal Consultation" ? "/chat" : title === "Legal Document Generator" ? "/documents" : title === "Case Strategy Builder" ? "/cases" : "/rights"}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-gold-400 hover:text-gold-300 transition-colors"
+                  href="/chat"
+                  className="absolute bottom-8 right-8 w-10 h-10 rounded-full bg-gold-400/10 flex items-center justify-center text-gold-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-gold-400/20"
                 >
-                  Get Started
-                  <ChevronRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
+            </Reveal>
+
+            {/* ── Stat card: Scenarios ── */}
+            <Reveal delay={1}>
+              <div className="bento-card p-8 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-32 h-32 bg-teal-500/[0.06] blur-[60px] rounded-full" />
+                <div className="relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center mb-5">
+                    <FileText className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <div className="text-4xl font-display font-bold text-white mb-2">
+                    50+
+                  </div>
+                  <p className="text-sm text-white/40 mb-4">
+                    Employment scenarios covered, from termination to salary
+                    disputes
+                  </p>
+                  <Link
+                    href="/documents"
+                    className="inline-flex items-center gap-1.5 text-sm text-teal-400 font-medium hover:text-teal-300 transition-colors"
+                  >
+                    Generate Documents
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* ── Stat card: Response time ── */}
+            <Reveal delay={2}>
+              <div className="bento-card p-8 relative overflow-hidden">
+                <div className="absolute bottom-0 right-0 w-32 h-32 bg-gold-400/[0.06] blur-[60px] rounded-full" />
+                <div className="relative z-10">
+                  <div className="w-10 h-10 rounded-xl bg-gold-400/10 flex items-center justify-center mb-5">
+                    <Zap className="w-5 h-5 text-gold-400" />
+                  </div>
+                  <div className="text-4xl font-display font-bold text-white mb-2">
+                    &lt;10s
+                  </div>
+                  <p className="text-sm text-white/40 mb-4">
+                    Average response time with detailed legal citations and
+                    references
+                  </p>
+                  <Link
+                    href="/cases"
+                    className="inline-flex items-center gap-1.5 text-sm text-gold-400 font-medium hover:text-gold-300 transition-colors"
+                  >
+                    Build Strategy
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Feature row — 3 equal cards below */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-5">
+            {[
+              {
+                icon: FileText,
+                title: "Legal Documents",
+                desc: "Demand letters, memorandums, contracts, and court submissions tailored to UAE standards.",
+                href: "/documents",
+                accent: "teal",
+              },
+              {
+                icon: Briefcase,
+                title: "Case Strategy",
+                desc: "Complete roadmap: evidence checklist, timeline, legal arguments, and action plan.",
+                href: "/cases",
+                accent: "gold",
+              },
+              {
+                icon: BookOpen,
+                title: "Know Your Rights",
+                desc: "Instantly understand your rights in any situation across all areas of UAE law.",
+                href: "/rights",
+                accent: "teal",
+              },
+            ].map(({ icon: Icon, title, desc, href, accent }, i) => (
+              <Reveal key={title} delay={i + 1}>
+                <Link href={href} className="block h-full">
+                  <div className="bento-card p-8 h-full group cursor-pointer">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center mb-5 ${
+                        accent === "gold"
+                          ? "bg-gold-400/10"
+                          : "bg-teal-500/10"
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 ${
+                          accent === "gold"
+                            ? "text-gold-400"
+                            : "text-teal-400"
+                        }`}
+                      />
+                    </div>
+                    <h3 className="font-display font-bold text-white text-lg mb-2 group-hover:text-gold-400 transition-colors">
+                      {title}
+                    </h3>
+                    <p className="text-sm text-white/40 leading-relaxed mb-4">
+                      {desc}
+                    </p>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-white/30 group-hover:text-gold-400 transition-colors">
+                      Explore
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </div>
+                </Link>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Legal Areas */}
-      <section className="py-20 border-y border-gold-400/10 bg-navy-700/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-bold text-warm-white mb-3">
-              All Areas of
-              <span className="gold-text"> UAE Law</span>
-            </h2>
-            <p className="text-warm-white/50">Comprehensive coverage across every legal domain in the UAE</p>
-          </div>
+      {/* ═══════ LEGAL AREAS ═══════ */}
+      <section className="py-24 sm:py-32 border-t border-white/[0.04]">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-16">
+              <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white mb-5">
+                All areas of{" "}
+                <span className="gold-text italic">UAE law</span>
+              </h2>
+              <p className="text-lg text-white/40 max-w-xl mx-auto">
+                Comprehensive coverage across every legal domain
+              </p>
+            </div>
+          </Reveal>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {legalAreas.map(({ icon, title, desc }) => (
-              <Link
-                key={title}
-                href="/chat"
-                className="glass glass-hover rounded-xl p-5 text-center group"
-              >
-                <div className="text-3xl mb-3">{icon}</div>
-                <h3 className="text-sm font-semibold text-warm-white mb-1.5 group-hover:text-gold-400 transition-colors">
-                  {title}
-                </h3>
-                <p className="text-xs text-warm-white/40 leading-relaxed">{desc}</p>
-              </Link>
+            {[
+              { icon: "👔", title: "Employment", desc: "Termination, gratuity, disputes" },
+              { icon: "🏢", title: "Business", desc: "Formation, contracts, licensing" },
+              { icon: "🏠", title: "Real Estate", desc: "Tenancy, RERA, Ejari" },
+              { icon: "👨‍👩‍👧", title: "Family", desc: "Divorce, custody, inheritance" },
+              { icon: "⚖️", title: "Criminal", desc: "Rights, procedures, bail" },
+              { icon: "✈️", title: "Immigration", desc: "Visas, Golden Visa, permits" },
+              { icon: "💼", title: "Debt & Finance", desc: "Cheque cases, restructuring" },
+              { icon: "🛡️", title: "Consumer", desc: "Fraud, liability, refunds" },
+            ].map(({ icon, title, desc }, i) => (
+              <Reveal key={title} delay={Math.min(i + 1, 4)}>
+                <Link href="/chat" className="block">
+                  <div className="card-surface-interactive p-6 text-center">
+                    <div className="text-3xl mb-3">{icon}</div>
+                    <h3 className="font-display font-semibold text-white text-sm mb-1">
+                      {title}
+                    </h3>
+                    <p className="text-xs text-white/35">{desc}</p>
+                  </div>
+                </Link>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* How it works */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-warm-white mb-4">
-              Get Legal Help in
-              <span className="gold-text"> 3 Simple Steps</span>
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            <div className="hidden md:block absolute top-10 left-1/3 right-1/3 h-px bg-gradient-to-r from-gold-400/30 via-gold-400/60 to-gold-400/30" />
+      {/* ═══════ HOW IT WORKS ═══════ */}
+      <section className="py-24 sm:py-32 border-t border-white/[0.04] section-gradient">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-20">
+              <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white mb-5">
+                Get legal help in{" "}
+                <span className="gold-text italic">three</span> steps
+              </h2>
+            </div>
+          </Reveal>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8 relative">
+            {/* Connector line */}
+            <div className="hidden md:block absolute top-12 left-[20%] right-[20%] h-px bg-gradient-to-r from-gold-400/20 via-gold-400/40 to-gold-400/20" />
+
             {[
               {
                 step: "01",
                 icon: MessageSquare,
-                title: "Describe Your Situation",
-                desc: "Tell Sidqo about your legal issue in plain language. No legal jargon required.",
+                title: "Describe your situation",
+                desc: "Tell Sidqo about your legal issue in plain language. No legal jargon needed.",
               },
               {
                 step: "02",
                 icon: Scale,
-                title: "AI Analyzes UAE Law",
-                desc: "Our AI instantly cross-references your situation against UAE federal and local laws.",
+                title: "AI analyzes UAE law",
+                desc: "Our AI cross-references your situation against 1,500+ UAE federal and local laws.",
               },
               {
                 step: "03",
-                icon: Gavel,
-                title: "Get Your Legal Strategy",
-                desc: "Receive a complete action plan, documents, and step-by-step guidance tailored to your case.",
+                icon: FileText,
+                title: "Get your legal strategy",
+                desc: "Receive a complete action plan with documents, timelines, and clear next steps.",
               },
-            ].map(({ step, icon: Icon, title, desc }) => (
-              <div key={step} className="relative text-center">
-                <div className="relative inline-block mb-6">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold-400/20 to-gold-600/10 border border-gold-400/30 flex items-center justify-center mx-auto gold-glow">
-                    <Icon className="w-8 h-8 text-gold-400" />
+            ].map(({ step, icon: Icon, title, desc }, i) => (
+              <Reveal key={step} delay={i + 1}>
+                <div className="text-center relative">
+                  <div className="relative inline-block mb-8">
+                    <div className="w-24 h-24 rounded-3xl bg-surface-1 border border-white/[0.06] flex items-center justify-center mx-auto">
+                      <Icon className="w-9 h-9 text-gold-400" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-gold-400 text-surface-0 text-xs font-display font-bold flex items-center justify-center">
+                      {step.replace("0", "")}
+                    </div>
                   </div>
-                  <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-gold-400 text-navy-900 text-xs font-bold flex items-center justify-center">
-                    {step.replace("0", "")}
-                  </div>
+                  <h3 className="font-display font-bold text-white text-lg mb-3">
+                    {title}
+                  </h3>
+                  <p className="text-sm text-white/40 leading-relaxed max-w-xs mx-auto">
+                    {desc}
+                  </p>
                 </div>
-                <h3 className="text-lg font-semibold text-warm-white mb-3">{title}</h3>
-                <p className="text-warm-white/50 text-sm leading-relaxed">{desc}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-20 bg-navy-700/20 border-y border-gold-400/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-warm-white mb-3">
-              Trusted by <span className="gold-text">UAE Residents</span>
-            </h2>
-            <div className="flex items-center justify-center gap-1">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 text-gold-400 fill-current" />
-              ))}
-              <span className="ml-2 text-warm-white/50 text-sm">4.9/5 from 2,400+ users</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map(({ text, name, role, rating }) => (
-              <div key={name} className="glass rounded-2xl p-6">
-                <div className="flex gap-1 mb-4">
-                  {[...Array(rating)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 text-gold-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-warm-white/70 text-sm leading-relaxed mb-5 italic">"{text}"</p>
-                <div>
-                  <div className="text-sm font-semibold text-warm-white">{name}</div>
-                  <div className="text-xs text-warm-white/40 mt-0.5">{role}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Disclaimer */}
-      <section className="py-10">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="rounded-xl border border-gold-400/20 bg-gold-400/5 p-5 flex gap-4">
-            <Shield className="w-5 h-5 text-gold-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-gold-400 mb-1">Important Legal Disclaimer</p>
-              <p className="text-xs text-warm-white/50 leading-relaxed">
-                Sidqo is an AI-powered legal information platform for educational and informational purposes only. The information provided does not constitute legal advice and should not be relied upon as such. For specific legal matters, always consult a licensed attorney qualified to practice in the UAE. Sidqo is not a law firm and does not create an attorney-client relationship.
+      {/* ═══════ FAQ ═══════ */}
+      <section className="py-24 sm:py-32 border-t border-white/[0.04]">
+        <div className="max-w-3xl mx-auto px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-16">
+              <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white mb-5">
+                Common questions
+              </h2>
+              <p className="text-lg text-white/40">
+                Everything you need to know about Sidqo
               </p>
             </div>
-          </div>
+          </Reveal>
+
+          <Reveal>
+            <div className="divide-y divide-white/[0.04]">
+              {faqs.map(({ q, a }) => (
+                <FAQItem key={q} q={q} a={a} />
+              ))}
+            </div>
+          </Reveal>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-r from-navy-700 via-navy-600 to-navy-700" />
-          <div className="absolute inset-0 bg-gradient-radial from-gold-400/10 via-transparent to-transparent" />
-          <div className="absolute inset-0 pattern-overlay" />
+      {/* ═══════ DISCLAIMER ═══════ */}
+      <section className="pb-6">
+        <div className="max-w-3xl mx-auto px-6 lg:px-8">
+          <Reveal>
+            <div className="rounded-2xl border border-gold-400/10 bg-gold-400/[0.02] p-6 flex gap-4">
+              <Shield className="w-5 h-5 text-gold-400/60 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-display font-semibold text-gold-400/80 mb-1.5">
+                  Legal Disclaimer
+                </p>
+                <p className="text-xs text-white/35 leading-relaxed">
+                  Sidqo provides AI-powered legal information for educational
+                  purposes only. This does not constitute legal advice. For
+                  specific legal matters, always consult a licensed attorney
+                  qualified to practice in the UAE.
+                </p>
+              </div>
+            </div>
+          </Reveal>
         </div>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center mx-auto mb-8 gold-glow-intense">
-            <Scale className="w-8 h-8 text-navy-900" />
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold text-warm-white mb-5">
-            Ready to Understand
-            <span className="gold-text"> Your Rights?</span>
-          </h2>
-          <p className="text-lg text-warm-white/60 mb-10 max-w-xl mx-auto">
-            Join thousands of UAE residents who use Sidqo to navigate legal challenges with confidence.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+      </section>
+
+      {/* ═══════ FINAL CTA ═══════ */}
+      <section className="py-24 sm:py-32 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-b from-surface-0 via-surface-1 to-surface-0" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold-400/[0.04] rounded-full blur-[120px]" />
+        </div>
+        <div className="relative z-10 max-w-3xl mx-auto px-6 lg:px-8 text-center">
+          <Reveal>
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-400 to-gold-500 flex items-center justify-center mx-auto mb-8 gold-glow">
+              <Scale className="w-8 h-8 text-surface-0" />
+            </div>
+          </Reveal>
+          <Reveal delay={1}>
+            <h2 className="font-display text-display-sm sm:text-display-md font-bold text-white mb-6">
+              Stop guessing.
+              <br />
+              <span className="gold-text italic">Start knowing.</span>
+            </h2>
+          </Reveal>
+          <Reveal delay={2}>
+            <p className="text-lg text-white/40 mb-10 max-w-lg mx-auto">
+              Join thousands of UAE residents who navigate legal challenges with
+              confidence.
+            </p>
+          </Reveal>
+          <Reveal delay={3}>
             <Link
               href="/chat"
-              className="btn-primary flex items-center gap-3 text-base px-8 py-4 rounded-xl group"
+              className="btn-primary inline-flex items-center gap-3 text-[15px] px-10 py-4 group"
             >
-              <MessageSquare className="w-5 h-5" />
+              <MessageSquare className="w-4 h-4" />
               Start Free Consultation
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
             </Link>
-            <Link
-              href="/documents"
-              className="btn-secondary flex items-center gap-3 text-base px-8 py-4 rounded-xl"
-            >
-              <FileText className="w-5 h-5" />
-              Generate Legal Document
-            </Link>
-          </div>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-warm-white/40">
-            {["No signup required", "Free to use", "Instant responses", "UAE law expert"].map((item) => (
-              <div key={item} className="flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4 text-gold-400/50" />
-                {item}
-              </div>
-            ))}
-          </div>
+          </Reveal>
         </div>
       </section>
 
