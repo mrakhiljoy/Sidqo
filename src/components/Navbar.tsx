@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Scale, Menu, X, ArrowRight } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
+import { Scale, Menu, X, ArrowRight, LogOut } from "lucide-react";
 
 const navLinks = [
   { href: "/chat", label: "AI Lawyer" },
@@ -15,6 +17,8 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { data: session } = useSession();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -65,15 +69,56 @@ export default function Navbar() {
             })}
           </nav>
 
-          {/* CTA */}
+          {/* CTA / User */}
           <div className="hidden md:flex items-center">
-            <Link
-              href="/chat"
-              className="btn-primary text-sm px-6 py-2.5 flex items-center gap-2"
-            >
-              Get Started
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            {session?.user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-full hover:bg-white/[0.06] transition-all"
+                >
+                  {session.user.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      width={32}
+                      height={32}
+                      className="rounded-full"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gold-400/20 flex items-center justify-center text-gold-400 text-sm font-semibold">
+                      {session.user.name?.charAt(0) || "U"}
+                    </div>
+                  )}
+                  <span className="text-sm text-white/70 font-medium max-w-[120px] truncate">
+                    {session.user.name?.split(" ")[0]}
+                  </span>
+                </button>
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-surface-1 border border-white/[0.08] shadow-2xl p-2">
+                    <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
+                      <p className="text-sm text-white font-medium truncate">{session.user.name}</p>
+                      <p className="text-xs text-white/40 truncate">{session.user.email}</p>
+                    </div>
+                    <button
+                      onClick={() => signOut()}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                href="/chat"
+                className="btn-primary text-sm px-6 py-2.5 flex items-center gap-2"
+              >
+                Get Started
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}

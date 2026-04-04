@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import TextareaAutosize from "react-textarea-autosize";
+import LoginModal from "@/components/LoginModal";
 import {
   Scale,
   Send,
@@ -52,11 +54,14 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 function ChatContent() {
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState(0);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const pendingMessageRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -75,6 +80,16 @@ function ChatContent() {
     }
   }, [searchParams]);
 
+  // Auto-send pending message after login
+  useEffect(() => {
+    if (session && pendingMessageRef.current) {
+      const pending = pendingMessageRef.current;
+      pendingMessageRef.current = null;
+      setShowLoginModal(false);
+      sendMessage(pending);
+    }
+  }, [session]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -82,6 +97,14 @@ function ChatContent() {
   const sendMessage = async (messageText?: string) => {
     const text = messageText || input.trim();
     if (!text || isStreaming) return;
+
+    // Gate behind auth — show login modal if not signed in
+    if (!session) {
+      pendingMessageRef.current = text;
+      setInput("");
+      setShowLoginModal(true);
+      return;
+    }
 
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
     setMessages(newMessages);
@@ -396,6 +419,7 @@ function ChatContent() {
           </div>
         </div>
       </div>
+      <LoginModal isOpen={showLoginModal} />
     </div>
   );
 }

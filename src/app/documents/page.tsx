@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import {
   FileText,
@@ -14,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Footer from "@/components/Footer";
+import LoginModal from "@/components/LoginModal";
 
 const documentTypes = [
   {
@@ -75,6 +77,7 @@ const documentTypes = [
 ];
 
 export default function DocumentsPage() {
+  const { data: session } = useSession();
   const [selectedType, setSelectedType] = useState("");
   const [party1, setParty1] = useState("");
   const [party2, setParty2] = useState("");
@@ -84,10 +87,15 @@ export default function DocumentsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const generateDocument = async () => {
     if (!selectedType || !details.trim()) {
       setError("Please select a document type and provide details.");
+      return;
+    }
+    if (!session) {
+      setShowLoginModal(true);
       return;
     }
     setError("");
@@ -406,6 +414,7 @@ export default function DocumentsPage() {
       </div>
 
       <Footer />
+      <LoginModal isOpen={showLoginModal} />
     </div>
   );
 }

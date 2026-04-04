@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import {
   Briefcase,
@@ -17,6 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import Footer from "@/components/Footer";
+import LoginModal from "@/components/LoginModal";
 
 const caseTypes = [
   { id: "employment", label: "Employment Dispute", icon: "👔" },
@@ -46,6 +48,7 @@ const urgencyLevels = [
 ];
 
 export default function CasesPage() {
+  const { data: session } = useSession();
   const [caseType, setCaseType] = useState("");
   const [emirate, setEmirate] = useState("");
   const [urgency, setUrgency] = useState("normal");
@@ -56,10 +59,15 @@ export default function CasesPage() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const generateStrategy = async () => {
     if (!caseType || !situation.trim()) {
       setError("Please select a case type and describe your situation.");
+      return;
+    }
+    if (!session) {
+      setShowLoginModal(true);
       return;
     }
     setError("");
@@ -380,6 +388,7 @@ export default function CasesPage() {
       </div>
 
       <Footer />
+      <LoginModal isOpen={showLoginModal} />
     </div>
   );
 }
