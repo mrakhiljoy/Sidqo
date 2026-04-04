@@ -17,6 +17,7 @@ import {
 import Footer from "@/components/Footer";
 import LoginModal from "@/components/LoginModal";
 import UpgradeModal from "@/components/UpgradeModal";
+import { trackEvent } from "@/components/PostHogProvider";
 import { FREE_DOC_LIMIT, hasReachedLimit, incrementCount } from "@/hooks/useMessageQuota";
 
 const documentTypes = [
@@ -99,6 +100,7 @@ export default function DocumentsPage() {
     }
     if (!session) {
       setShowLoginModal(true);
+      trackEvent("login_modal_shown", { trigger: "documents" });
       return;
     }
     if (
@@ -107,11 +109,16 @@ export default function DocumentsPage() {
       hasReachedLimit("doc", session.user.email, FREE_DOC_LIMIT)
     ) {
       setShowUpgradeModal(true);
+      trackEvent("upgrade_modal_shown", { trigger: "documents" });
       return;
     }
     if (session.user?.subscriptionStatus !== "active" && session.user?.email) {
       incrementCount("doc", session.user.email);
     }
+    trackEvent("document_generated", {
+      document_type: selectedType,
+      subscription_status: session.user?.subscriptionStatus || "free",
+    });
     setError("");
     setIsGenerating(true);
     setGeneratedDoc("");

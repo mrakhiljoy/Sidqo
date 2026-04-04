@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Sparkles, Check, X, Loader2, Crown } from "lucide-react";
+import { trackEvent } from "@/components/PostHogProvider";
 
 const features = [
   "Unlimited AI legal consultations",
@@ -23,10 +24,12 @@ export default function UpgradeModal({
 
   const handleUpgrade = async () => {
     setLoading(true);
+    trackEvent("upgrade_clicked", { source: "upgrade_modal" });
     try {
       const res = await fetch("/api/checkout", { method: "POST" });
       const data = await res.json();
       if (data.url) {
+        trackEvent("checkout_redirect", { url: data.url });
         window.location.href = data.url;
       } else {
         console.error("No checkout URL returned");

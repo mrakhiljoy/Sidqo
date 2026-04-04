@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { trackEvent } from "@/components/PostHogProvider";
 import {
   ArrowRight,
   MessageSquare,
@@ -211,6 +212,7 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 animate-slide-up-delay-2 opacity-0">
               <Link
                 href="/chat"
+                onClick={() => trackEvent("cta_clicked", { location: "hero", label: "Talk to AI Lawyer" })}
                 className="btn-primary flex items-center gap-3 text-[15px] px-8 py-4 group"
               >
                 <MessageSquare className="w-4 h-4" />
@@ -665,6 +667,7 @@ export default function HomePage() {
           <Reveal delay={3}>
             <Link
               href="/chat"
+              onClick={() => trackEvent("cta_clicked", { location: "bottom", label: "Start Free Consultation" })}
               className="btn-primary inline-flex items-center gap-3 text-[15px] px-10 py-4 group"
             >
               <MessageSquare className="w-4 h-4" />

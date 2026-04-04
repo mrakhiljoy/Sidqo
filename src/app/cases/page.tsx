@@ -20,6 +20,7 @@ import {
 import Footer from "@/components/Footer";
 import LoginModal from "@/components/LoginModal";
 import UpgradeModal from "@/components/UpgradeModal";
+import { trackEvent } from "@/components/PostHogProvider";
 import { FREE_CASE_LIMIT, hasReachedLimit, incrementCount } from "@/hooks/useMessageQuota";
 
 const caseTypes = [
@@ -71,6 +72,7 @@ export default function CasesPage() {
     }
     if (!session) {
       setShowLoginModal(true);
+      trackEvent("login_modal_shown", { trigger: "cases" });
       return;
     }
     if (
@@ -79,11 +81,18 @@ export default function CasesPage() {
       hasReachedLimit("case", session.user.email, FREE_CASE_LIMIT)
     ) {
       setShowUpgradeModal(true);
+      trackEvent("upgrade_modal_shown", { trigger: "cases" });
       return;
     }
     if (session.user?.subscriptionStatus !== "active" && session.user?.email) {
       incrementCount("case", session.user.email);
     }
+    trackEvent("case_strategy_generated", {
+      case_type: caseType,
+      emirate: emirate || "not_specified",
+      urgency,
+      subscription_status: session.user?.subscriptionStatus || "free",
+    });
     setError("");
     setIsGenerating(true);
     setStrategy("");

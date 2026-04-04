@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Check, Scale } from "lucide-react";
+import { trackEvent } from "@/components/PostHogProvider";
 
 export default function CheckoutSuccessPage() {
   const { update } = useSession();
@@ -11,6 +12,8 @@ export default function CheckoutSuccessPage() {
   const [countdown, setCountdown] = useState(4);
 
   useEffect(() => {
+    trackEvent("subscription_activated", { plan: "pro", price: "AED 49/mo" });
+
     // Trigger JWT refresh immediately so subscriptionStatus updates to "active"
     // before the user lands back on /chat — this is what unblocks the pending message
     update();

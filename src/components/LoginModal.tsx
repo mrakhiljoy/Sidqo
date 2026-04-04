@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { Scale, Shield } from "lucide-react";
+import { trackEvent } from "@/components/PostHogProvider";
 
 export default function LoginModal({ isOpen }: { isOpen: boolean }) {
   if (!isOpen) return null;
@@ -30,7 +31,10 @@ export default function LoginModal({ isOpen }: { isOpen: boolean }) {
 
         {/* Google Sign In */}
         <button
-          onClick={() => signIn("google")}
+          onClick={() => {
+            trackEvent("login_started", { provider: "google" });
+            signIn("google");
+          }}
           className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-white text-surface-0 font-semibold text-[15px] hover:bg-white/90 transition-all hover:shadow-lg cursor-pointer"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">

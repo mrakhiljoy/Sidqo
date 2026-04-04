@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Providers from "@/components/Providers";
+import PostHogProviderWrapper from "@/components/PostHogProvider";
 
 export const metadata: Metadata = {
   title: "Sidqo — AI Legal Guidance for UAE",
@@ -32,8 +33,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased noise-overlay">
         <Providers>
-          <Navbar />
-          <main>{children}</main>
+          <PostHogProviderWrapper>
+            <Navbar />
+            <main>{children}</main>
+          </PostHogProviderWrapper>
         </Providers>
       </body>
     </html>

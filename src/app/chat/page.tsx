@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import TextareaAutosize from "react-textarea-autosize";
 import LoginModal from "@/components/LoginModal";
 import UpgradeModal from "@/components/UpgradeModal";
+import { trackEvent } from "@/components/PostHogProvider";
 import {
   FREE_MESSAGE_LIMIT,
   hasReachedLimit,
@@ -151,6 +152,7 @@ function ChatContent() {
       localStorage.setItem(PENDING_REASON_KEY, "login");
       setInput("");
       setShowLoginModal(true);
+      trackEvent("login_modal_shown", { trigger: "chat", message_length: text.length });
       return;
     }
 
@@ -164,6 +166,7 @@ function ChatContent() {
       localStorage.setItem(PENDING_MSG_KEY, text);
       localStorage.setItem(PENDING_REASON_KEY, "upgrade");
       setShowUpgradeModal(true);
+      trackEvent("upgrade_modal_shown", { trigger: "chat", messages_used: FREE_MESSAGE_LIMIT });
       return;
     }
 
@@ -174,6 +177,14 @@ function ChatContent() {
     ) {
       incrementCount("msg", session.user.email);
     }
+
+    // Track the message
+    trackEvent("chat_message_sent", {
+      message_length: text.length,
+      is_first_message: messages.length === 0,
+      subscription_status: session.user?.subscriptionStatus || "free",
+      total_messages: messages.length + 1,
+    });
 
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
     setMessages(newMessages);
