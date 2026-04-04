@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import LoginModal from "@/components/LoginModal";
+import UpgradeModal from "@/components/UpgradeModal";
+import { FREE_DOC_LIMIT, hasReachedLimit, incrementCount } from "@/hooks/useMessageQuota";
 
 const documentTypes = [
   {
@@ -88,6 +90,7 @@ export default function DocumentsPage() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const generateDocument = async () => {
     if (!selectedType || !details.trim()) {
@@ -97,6 +100,17 @@ export default function DocumentsPage() {
     if (!session) {
       setShowLoginModal(true);
       return;
+    }
+    if (
+      session.user?.subscriptionStatus !== "active" &&
+      session.user?.email &&
+      hasReachedLimit("doc", session.user.email, FREE_DOC_LIMIT)
+    ) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    if (session.user?.subscriptionStatus !== "active" && session.user?.email) {
+      incrementCount("doc", session.user.email);
     }
     setError("");
     setIsGenerating(true);
@@ -415,6 +429,10 @@ export default function DocumentsPage() {
 
       <Footer />
       <LoginModal isOpen={showLoginModal} />
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }

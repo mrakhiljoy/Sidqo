@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { Scale, Menu, X, ArrowRight, LogOut } from "lucide-react";
+import { Scale, Menu, X, ArrowRight, LogOut, Crown, CreditCard } from "lucide-react";
 
 const navLinks = [
   { href: "/chat", label: "AI Lawyer" },
@@ -93,13 +93,47 @@ export default function Navbar() {
                   <span className="text-sm text-white/70 font-medium max-w-[120px] truncate">
                     {session.user.name?.split(" ")[0]}
                   </span>
+                  {session.user.subscriptionStatus === "active" && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gold-400/20 text-gold-400 uppercase tracking-wider">
+                      Pro
+                    </span>
+                  )}
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-surface-1 border border-white/[0.08] shadow-2xl p-2">
                     <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
-                      <p className="text-sm text-white font-medium truncate">{session.user.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-white font-medium truncate">{session.user.name}</p>
+                        {session.user.subscriptionStatus === "active" && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gold-400/20 text-gold-400">
+                            PRO
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-white/40 truncate">{session.user.email}</p>
                     </div>
+                    {session.user.subscriptionStatus === "active" ? (
+                      <button
+                        onClick={async () => {
+                          const res = await fetch("/api/billing-portal", { method: "POST" });
+                          const data = await res.json();
+                          if (data.url) window.location.href = data.url;
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Manage Subscription
+                      </button>
+                    ) : (
+                      <Link
+                        href="/chat"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-gold-400 hover:bg-gold-400/10 transition-all"
+                      >
+                        <Crown className="w-4 h-4" />
+                        Upgrade to Pro
+                      </Link>
+                    )}
                     <button
                       onClick={() => signOut()}
                       className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-white/50 hover:text-white hover:bg-white/[0.06] transition-all"

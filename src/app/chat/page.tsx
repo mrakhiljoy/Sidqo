@@ -6,6 +6,12 @@ import { useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import TextareaAutosize from "react-textarea-autosize";
 import LoginModal from "@/components/LoginModal";
+import UpgradeModal from "@/components/UpgradeModal";
+import {
+  FREE_MESSAGE_LIMIT,
+  hasReachedLimit,
+  incrementCount,
+} from "@/hooks/useMessageQuota";
 import {
   Scale,
   Send,
@@ -61,6 +67,7 @@ function ChatContent() {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState(0);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const pendingMessageRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -104,6 +111,24 @@ function ChatContent() {
       setInput("");
       setShowLoginModal(true);
       return;
+    }
+
+    // Gate behind subscription — check free tier quota
+    if (
+      session.user?.subscriptionStatus !== "active" &&
+      session.user?.email &&
+      hasReachedLimit("msg", session.user.email, FREE_MESSAGE_LIMIT)
+    ) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    // Increment message count for free users
+    if (
+      session.user?.subscriptionStatus !== "active" &&
+      session.user?.email
+    ) {
+      incrementCount("msg", session.user.email);
     }
 
     const newMessages: Message[] = [...messages, { role: "user", content: text }];
@@ -420,6 +445,10 @@ function ChatContent() {
         </div>
       </div>
       <LoginModal isOpen={showLoginModal} />
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }

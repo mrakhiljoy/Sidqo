@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import LoginModal from "@/components/LoginModal";
+import UpgradeModal from "@/components/UpgradeModal";
+import { FREE_CASE_LIMIT, hasReachedLimit, incrementCount } from "@/hooks/useMessageQuota";
 
 const caseTypes = [
   { id: "employment", label: "Employment Dispute", icon: "👔" },
@@ -60,6 +62,7 @@ export default function CasesPage() {
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const generateStrategy = async () => {
     if (!caseType || !situation.trim()) {
@@ -69,6 +72,17 @@ export default function CasesPage() {
     if (!session) {
       setShowLoginModal(true);
       return;
+    }
+    if (
+      session.user?.subscriptionStatus !== "active" &&
+      session.user?.email &&
+      hasReachedLimit("case", session.user.email, FREE_CASE_LIMIT)
+    ) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    if (session.user?.subscriptionStatus !== "active" && session.user?.email) {
+      incrementCount("case", session.user.email);
     }
     setError("");
     setIsGenerating(true);
@@ -389,6 +403,10 @@ export default function CasesPage() {
 
       <Footer />
       <LoginModal isOpen={showLoginModal} />
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </div>
   );
 }
