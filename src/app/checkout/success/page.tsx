@@ -8,14 +8,20 @@ import { Check, Scale } from "lucide-react";
 export default function CheckoutSuccessPage() {
   const { update } = useSession();
   const router = useRouter();
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(4);
 
   useEffect(() => {
-    // Force session refresh so JWT picks up the new subscription
+    // Trigger JWT refresh immediately so subscriptionStatus updates to "active"
+    // before the user lands back on /chat — this is what unblocks the pending message
     update();
 
-    // Also hit the subscription endpoint to confirm
+    // Also hit the subscription endpoint to force a Stripe re-check
     fetch("/api/subscription?refresh=true").catch(() => {});
+
+    // Trigger a second refresh after 2s to catch any timing delay from Stripe
+    const secondRefresh = setTimeout(() => {
+      update();
+    }, 2000);
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -28,7 +34,10 @@ export default function CheckoutSuccessPage() {
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(secondRefresh);
+    };
   }, []);
 
   return (
@@ -47,7 +56,7 @@ export default function CheckoutSuccessPage() {
           Welcome to <span className="gold-text">Sidqo Pro</span>
         </h1>
         <p className="text-white/50 text-base mb-8 leading-relaxed">
-          Your subscription is active. You now have unlimited access to all features — AI legal consultations, document generation, and case strategy analysis.
+          Your subscription is active. Heading back to your conversation now.
         </p>
 
         {/* Redirect notice */}
@@ -55,7 +64,7 @@ export default function CheckoutSuccessPage() {
           <div className="flex items-center justify-center gap-2 text-sm text-white/60">
             <Scale className="w-4 h-4 text-gold-400" />
             <span>
-              Redirecting to chat in{" "}
+              Returning in{" "}
               <span className="text-gold-400 font-semibold">{countdown}s</span>
             </span>
           </div>
@@ -66,7 +75,7 @@ export default function CheckoutSuccessPage() {
           href="/chat"
           className="btn-primary inline-flex items-center gap-2 px-8 py-3 text-sm"
         >
-          Start Using Sidqo Pro
+          Continue to Chat
         </a>
       </div>
     </div>

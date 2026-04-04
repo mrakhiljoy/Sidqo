@@ -58,6 +58,10 @@ const categoryIcons: Record<string, React.ElementType> = {
   "Consumer Rights": ShoppingCart,
 };
 
+// Keys that survive page navigation and OAuth/Stripe redirects
+const PENDING_MSG_KEY = "sidqo_pending_msg";
+const PENDING_REASON_KEY = "sidqo_pending_reason"; // "login" | "upgrade"
+
 function ChatContent() {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
@@ -87,15 +91,49 @@ function ChatContent() {
     }
   }, [searchParams]);
 
-  // Auto-send pending message after login
+  // Recovery 1: Login flow
+  // Fires when session arrives — works for same-session login (ref) AND
+  // page-reload login (localStorage, survives Google OAuth redirect)
   useEffect(() => {
-    if (session && pendingMessageRef.current) {
+    if (!session) return;
+
+    // Same-session: ref is set (no page reload happened)
+    if (pendingMessageRef.current) {
       const pending = pendingMessageRef.current;
       pendingMessageRef.current = null;
+      localStorage.removeItem(PENDING_MSG_KEY);
+      localStorage.removeItem(PENDING_REASON_KEY);
+      setShowLoginModal(false);
+      sendMessage(pending);
+      return;
+    }
+
+    // Cross-reload: ref is gone, check localStorage for login-origin pending
+    const reason = localStorage.getItem(PENDING_REASON_KEY);
+    const pending = localStorage.getItem(PENDING_MSG_KEY);
+    if (pending && reason === "login") {
+      localStorage.removeItem(PENDING_MSG_KEY);
+      localStorage.removeItem(PENDING_REASON_KEY);
       setShowLoginModal(false);
       sendMessage(pending);
     }
   }, [session]);
+
+  // Recovery 2: Stripe upgrade flow
+  // Fires when subscriptionStatus transitions to "active" — catches the moment
+  // the JWT refreshes after returning from Stripe Checkout
+  useEffect(() => {
+    if (session?.user?.subscriptionStatus !== "active") return;
+
+    const reason = localStorage.getItem(PENDING_REASON_KEY);
+    const pending = localStorage.getItem(PENDING_MSG_KEY);
+    if (pending && reason === "upgrade") {
+      localStorage.removeItem(PENDING_MSG_KEY);
+      localStorage.removeItem(PENDING_REASON_KEY);
+      setShowUpgradeModal(false);
+      sendMessage(pending);
+    }
+  }, [session?.user?.subscriptionStatus]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,6 +146,9 @@ function ChatContent() {
     // Gate behind auth — show login modal if not signed in
     if (!session) {
       pendingMessageRef.current = text;
+      // Persist to localStorage so it survives the Google OAuth page redirect
+      localStorage.setItem(PENDING_MSG_KEY, text);
+      localStorage.setItem(PENDING_REASON_KEY, "login");
       setInput("");
       setShowLoginModal(true);
       return;
@@ -119,6 +160,9 @@ function ChatContent() {
       session.user?.email &&
       hasReachedLimit("msg", session.user.email, FREE_MESSAGE_LIMIT)
     ) {
+      // Persist to localStorage so it survives the Stripe Checkout redirect
+      localStorage.setItem(PENDING_MSG_KEY, text);
+      localStorage.setItem(PENDING_REASON_KEY, "upgrade");
       setShowUpgradeModal(true);
       return;
     }
