@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
-  // Protect API routes (except auth routes)
-  const protectedPaths = ["/api/chat", "/api/documents", "/api/cases"];
+  // Protect API routes (except auth routes and webhooks)
+  const protectedPaths = ["/api/chat", "/api/documents", "/api/cases", "/api/translate", "/api/upload"];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
   if (isProtected && !req.auth) {
@@ -16,5 +16,11 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/api/chat/:path*", "/api/documents/:path*", "/api/cases/:path*"],
+  matcher: [
+    "/api/chat/:path*",
+    "/api/documents/:path*",
+    "/api/cases/:path*",
+    "/api/translate/:path*",
+    "/api/upload/:path*",
+  ],
 };

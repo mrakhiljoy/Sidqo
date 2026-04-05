@@ -1,445 +1,783 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import ReactMarkdown from "react-markdown";
+import Link from "next/link";
 import {
   FileText,
-  Download,
-  Copy,
+  Upload,
+  Clock,
+  Shield,
   Check,
-  Sparkles,
   ChevronRight,
-  Scale,
+  Languages,
+  ArrowRight,
   AlertCircle,
   Loader2,
+  X,
+  CreditCard,
+  Briefcase,
+  Scale,
+  Gavel,
+  Mail,
+  BookOpen,
+  Key,
+  Award,
+  ClipboardList,
+  ChevronDown,
+  File,
+  Image,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 import LoginModal from "@/components/LoginModal";
-import UpgradeModal from "@/components/UpgradeModal";
 import { trackEvent } from "@/components/PostHogProvider";
-import { FREE_DOC_LIMIT, hasReachedLimit, incrementCount } from "@/hooks/useMessageQuota";
 
-const documentTypes = [
+/* ─── Scroll Reveal Hook ──────────────────────────── */
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.classList.add("visible");
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return ref;
+}
+
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const ref = useReveal();
+  const delayClass = delay > 0 ? `reveal-delay-${delay}` : "";
+  return (
+    <div ref={ref} className={`reveal ${delayClass} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/* ─── Constants ──────────────────────────────────── */
+const PRICE_PER_PAGE = 45;
+const MINIMUM_CHARGE = 69;
+
+const trustBadges = [
+  { icon: Award, label: "MOJ Certified" },
+  { icon: Clock, label: "24hr Delivery" },
+  { icon: Shield, label: "72hr Refund Guarantee" },
+  { icon: Gavel, label: "Court Accepted" },
+];
+
+const steps = [
   {
-    id: "demand-letter",
-    icon: "✉️",
-    title: "Legal Demand Letter",
-    desc: "Formal demand for payment, action, or cessation of activity",
-    examples: ["Salary demand", "Rent refund", "Debt recovery"],
+    number: "1",
+    title: "Upload",
+    description:
+      "Upload your document (PDF, JPG, PNG) or send a chat response for translation",
+    icon: Upload,
   },
   {
-    id: "legal-memo",
-    icon: "📋",
-    title: "Legal Memorandum",
-    desc: "Detailed legal analysis memo for court or negotiation",
-    examples: ["Case analysis", "Rights summary", "Legal opinion"],
+    number: "2",
+    title: "Pay",
+    description:
+      "See transparent per-page pricing. Pay securely with Stripe.",
+    icon: CreditCard,
   },
   {
-    id: "noc",
-    icon: "📄",
-    title: "No Objection Certificate",
-    desc: "Official NOC letter for various purposes in UAE",
-    examples: ["Visa NOC", "Employment NOC", "Bank NOC"],
-  },
-  {
-    id: "complaint",
-    icon: "⚖️",
-    title: "Official Complaint",
-    desc: "Formal complaint to regulatory bodies like MOHRE, RERA, police",
-    examples: ["Labour complaint", "Tenancy complaint", "Police report"],
-  },
-  {
-    id: "contract",
-    icon: "🤝",
-    title: "Contract / Agreement",
-    desc: "Professional contracts following UAE legal standards",
-    examples: ["Service agreement", "Employment contract", "Sale agreement"],
-  },
-  {
-    id: "affidavit",
-    icon: "🏛️",
-    title: "Affidavit / Declaration",
-    desc: "Sworn statements and statutory declarations",
-    examples: ["Witness statement", "Declaration of facts", "Statutory declaration"],
-  },
-  {
-    id: "termination",
-    icon: "🚫",
-    title: "Termination Letter",
-    desc: "Employment or contract termination with UAE legal compliance",
-    examples: ["Employee termination", "Contract termination", "Lease termination"],
-  },
-  {
-    id: "power-of-attorney",
-    icon: "🔑",
-    title: "Power of Attorney",
-    desc: "UAE-compliant POA for legal representation",
-    examples: ["General POA", "Special POA", "Property POA"],
+    number: "3",
+    title: "Receive",
+    description:
+      "Get certified PDF with official stamps + Word doc within 24 hours",
+    icon: FileText,
   },
 ];
 
-export default function DocumentsPage() {
-  const { data: session } = useSession();
-  const [selectedType, setSelectedType] = useState("");
-  const [party1, setParty1] = useState("");
-  const [party2, setParty2] = useState("");
-  const [details, setDetails] = useState("");
-  const [additionalInfo, setAdditionalInfo] = useState("");
-  const [generatedDoc, setGeneratedDoc] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+const pricingTable = [
+  { type: "AI Chat Response", pages: "1-2 pages", price: "AED 69" },
+  { type: "Legal Memorandum", pages: "2-4 pages", price: "AED 90-180" },
+  { type: "Uploaded Doc (1-3 pg)", pages: "1-3 pages", price: "AED 69-135" },
+  { type: "Uploaded Doc (4-10 pg)", pages: "4-10 pages", price: "AED 180-450" },
+  { type: "10+ pages", pages: "10+ pages", price: "Custom quote" },
+];
 
-  const generateDocument = async () => {
-    if (!selectedType || !details.trim()) {
-      setError("Please select a document type and provide details.");
+const documentTypes = [
+  { icon: Briefcase, label: "Employment Contracts" },
+  { icon: Gavel, label: "Court Documents" },
+  { icon: AlertCircle, label: "Legal Notices" },
+  { icon: Mail, label: "Demand Letters" },
+  { icon: BookOpen, label: "Legal Memoranda" },
+  { icon: Key, label: "Power of Attorney" },
+  { icon: Award, label: "Certificates" },
+  { icon: ClipboardList, label: "Government Forms" },
+];
+
+const faqs = [
+  {
+    q: "Is the translation accepted by UAE courts?",
+    a: "Yes. All translations are completed by MOJ-certified translators and are accepted by UAE courts, government bodies, and all federal and local authorities.",
+  },
+  {
+    q: "How long does it take?",
+    a: "Standard delivery is within 24 hours. If we fail to deliver within 72 hours, you receive a full refund — no questions asked.",
+  },
+  {
+    q: "What languages do you support?",
+    a: "Currently we support English to Arabic certified legal translation. Additional language pairs are coming soon.",
+  },
+  {
+    q: "What file formats do you accept?",
+    a: "We accept PDF, JPG, and PNG files up to 25MB. For best results, ensure your document is clear and legible.",
+  },
+  {
+    q: "What if there's a quality issue?",
+    a: "We stand behind our work. If there is any quality concern, we provide a free re-translation at no additional cost.",
+  },
+];
+
+const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+/* ─── Page Component ─────────────────────────────── */
+export default function TranslatePage() {
+  const { data: session } = useSession();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [pageCount, setPageCount] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [error, setError] = useState("");
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const calculatedPrice = Math.max(pageCount * PRICE_PER_PAGE, MINIMUM_CHARGE);
+
+  const handleFile = (f: File) => {
+    setError("");
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      setError("Please upload a PDF, JPG, or PNG file.");
       return;
     }
+    if (f.size > MAX_FILE_SIZE) {
+      setError("File size exceeds 25MB limit.");
+      return;
+    }
+    setFile(f);
+    setPageCount(1);
+    trackEvent("translate_file_uploaded", {
+      file_type: f.type,
+      file_size: f.size,
+    });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) handleFile(droppedFile);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => setIsDragging(false);
+
+  const removeFile = () => {
+    setFile(null);
+    setPageCount(1);
+    setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleCheckout = async () => {
     if (!session) {
       setShowLoginModal(true);
-      trackEvent("login_modal_shown", { trigger: "documents" });
+      trackEvent("login_modal_shown", { trigger: "translate_checkout" });
       return;
     }
-    if (
-      session.user?.subscriptionStatus !== "active" &&
-      session.user?.email &&
-      hasReachedLimit("doc", session.user.email, FREE_DOC_LIMIT)
-    ) {
-      setShowUpgradeModal(true);
-      trackEvent("upgrade_modal_shown", { trigger: "documents" });
-      return;
-    }
-    if (session.user?.subscriptionStatus !== "active" && session.user?.email) {
-      incrementCount("doc", session.user.email);
-    }
-    trackEvent("document_generated", {
-      document_type: selectedType,
-      subscription_status: session.user?.subscriptionStatus || "free",
-    });
-    setError("");
-    setIsGenerating(true);
-    setGeneratedDoc("");
 
+    setIsCheckingOut(true);
+    setError("");
     try {
-      const res = await fetch("/api/documents", {
+      const res = await fetch("/api/translate/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          documentType: documentTypes.find((d) => d.id === selectedType)?.title,
-          details,
-          party1,
-          party2,
-          additionalInfo,
+          pages: pageCount,
+          documentType: "uploaded_doc",
+          filename: file?.name,
         }),
       });
-
-      if (!res.body) throw new Error("No response");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) {
-                accumulated += parsed.text;
-                setGeneratedDoc(accumulated);
-              }
-            } catch {}
-          }
-        }
+      const data = await res.json();
+      if (data.url) {
+        trackEvent("translate_checkout_started", {
+          pages: pageCount,
+          price: calculatedPrice,
+        });
+        window.location.href = data.url;
+      } else {
+        setError(data.error || "Failed to start checkout. Please try again.");
       }
     } catch {
-      setError("Failed to generate document. Please check your API key and try again.");
+      setError("Failed to start checkout. Please try again.");
     } finally {
-      setIsGenerating(false);
+      setIsCheckingOut(false);
     }
   };
 
-  const copyDocument = async () => {
-    await navigator.clipboard.writeText(generatedDoc);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const scrollToUpload = () => {
+    document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" });
+    trackEvent("translate_cta_clicked", { cta: "upload_document" });
   };
-
-  const downloadDocument = () => {
-    const blob = new Blob([generatedDoc], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const docTitle = documentTypes.find((d) => d.id === selectedType)?.title || "legal-document";
-    a.download = `sidqo-${docTitle.toLowerCase().replace(/\s+/g, "-")}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const selectedDocType = documentTypes.find((d) => d.id === selectedType);
 
   return (
     <div className="min-h-screen bg-navy-800">
-      {/* Hero */}
+      {/* Schema.org JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "LegalService",
+            name: "Sidqo Translate",
+            url: "https://sidqo.com/documents",
+            description:
+              "Certified legal document translation from English to Arabic, accepted by UAE courts and government bodies.",
+            areaServed: "UAE",
+            priceRange: "AED 79\u2013249",
+            availableLanguage: ["English", "Arabic"],
+          }),
+        }}
+      />
+
+      {/* ─── Hero Section ─────────────────────────────── */}
       <section className="relative pt-28 pb-12 border-b border-gold-400/10">
         <div className="absolute inset-0 mesh-bg pattern-overlay" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-400/10 border border-gold-400/20 mb-5">
-              <FileText className="w-4 h-4 text-gold-400" />
-              <span className="text-sm text-gold-400 font-medium">AI Legal Document Generator</span>
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-warm-white mb-4">
-              Generate Professional
-              <span className="gold-text"> UAE Legal Documents</span>
-            </h1>
-            <p className="text-lg text-warm-white/60 leading-relaxed">
-              Create legally sound documents following UAE standards instantly. Demand letters, contracts, NOCs, affidavits, and more — ready in seconds.
-            </p>
+          <div className="max-w-3xl">
+            <Reveal>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-400/10 border border-gold-400/20 mb-5">
+                <Languages className="w-4 h-4 text-gold-400" />
+                <span className="text-sm text-gold-400 font-medium">
+                  Certified Legal Translation
+                </span>
+              </div>
+            </Reveal>
+            <Reveal delay={1}>
+              <h1 className="text-4xl sm:text-5xl font-bold text-warm-white mb-4 leading-tight">
+                Certified Legal Translation for UAE Courts &amp; Government
+                <span className="gold-text"> — English to Arabic</span>
+              </h1>
+            </Reveal>
+            <Reveal delay={2}>
+              <p className="text-lg text-warm-white/60 leading-relaxed mb-8">
+                MOJ-certified translators deliver court-accepted Arabic
+                translations of your legal documents within 24 hours. Transparent
+                pricing at AED 45/page with a full refund guarantee.
+              </p>
+            </Reveal>
+            <Reveal delay={3}>
+              <div className="flex flex-wrap gap-4 mb-10">
+                <button onClick={scrollToUpload} className="btn-primary flex items-center gap-2">
+                  <Upload className="w-4 h-4" />
+                  Upload Document
+                </button>
+                <Link
+                  href="/documents/my-translations"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl glass glass-hover text-warm-white/80 hover:text-warm-white font-medium transition-all"
+                >
+                  <FileText className="w-4 h-4" />
+                  My Translations
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </Reveal>
+            <Reveal delay={4}>
+              <div className="flex flex-wrap gap-3">
+                {trustBadges.map((badge) => (
+                  <div
+                    key={badge.label}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm text-warm-white/60"
+                  >
+                    <badge.icon className="w-4 h-4 text-gold-400" />
+                    {badge.label}
+                  </div>
+                ))}
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left: Form */}
-          <div className="space-y-6">
-            {/* Document type selection */}
-            <div>
-              <h2 className="text-lg font-semibold text-warm-white mb-4 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-gold-400/20 text-gold-400 text-sm font-bold flex items-center justify-center">1</span>
-                Select Document Type
+      {/* ─── How It Works ─────────────────────────────── */}
+      <section className="py-20 border-b border-gold-400/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-14">
+              <h2 className="text-3xl font-bold text-warm-white mb-3">
+                How It Works
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {documentTypes.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => setSelectedType(doc.id)}
-                    className={`glass glass-hover rounded-xl p-4 text-left transition-all ${
-                      selectedType === doc.id
-                        ? "border-gold-400/60 bg-gold-400/10 gold-glow"
-                        : "border-gold-400/15"
+              <p className="text-warm-white/50 max-w-lg mx-auto">
+                Three simple steps to get your certified translation
+              </p>
+            </div>
+          </Reveal>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
+            {/* Connector line (desktop only) */}
+            <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-px bg-gradient-to-r from-gold-400/0 via-gold-400/30 to-gold-400/0" />
+            {steps.map((step, i) => (
+              <Reveal key={step.number} delay={i + 1}>
+                <div className="glass rounded-2xl p-8 text-center relative">
+                  <div className="w-14 h-14 rounded-2xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mx-auto mb-5">
+                    <step.icon className="w-6 h-6 text-gold-400" />
+                  </div>
+                  <div className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gold-400/20 text-gold-400 text-sm font-bold mb-3">
+                    {step.number}
+                  </div>
+                  <h3 className="text-lg font-semibold text-warm-white mb-2">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm text-warm-white/50 leading-relaxed">
+                    {step.description}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Pricing Section ──────────────────────────── */}
+      <section className="py-20 border-b border-gold-400/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-14">
+              <h2 className="text-3xl font-bold text-warm-white mb-3">
+                Transparent Pricing
+              </h2>
+              <p className="text-warm-white/50 max-w-lg mx-auto">
+                Simple per-page pricing with no hidden fees
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="max-w-3xl mx-auto">
+            <Reveal>
+              <div className="glass rounded-2xl p-8 mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+                  <div>
+                    <div className="text-warm-white/50 text-sm mb-1">
+                      Per-page rate
+                    </div>
+                    <div className="text-4xl font-bold text-warm-white">
+                      AED <span className="gold-text">45</span>
+                      <span className="text-lg text-warm-white/40 font-normal">
+                        /page
+                      </span>
+                    </div>
+                  </div>
+                  <div className="glass rounded-xl px-5 py-3 text-center">
+                    <div className="text-warm-white/50 text-xs mb-0.5">
+                      Minimum charge
+                    </div>
+                    <div className="text-xl font-bold text-gold-400">
+                      AED 69
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="text-left text-warm-white/40 font-medium py-3 pr-4">
+                          Document Type
+                        </th>
+                        <th className="text-left text-warm-white/40 font-medium py-3 pr-4">
+                          Typical Size
+                        </th>
+                        <th className="text-right text-warm-white/40 font-medium py-3">
+                          Price
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pricingTable.map((row, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-white/[0.04] last:border-0"
+                        >
+                          <td className="py-3 pr-4 text-warm-white/80">
+                            {row.type}
+                          </td>
+                          <td className="py-3 pr-4 text-warm-white/50">
+                            {row.pages}
+                          </td>
+                          <td className="py-3 text-right font-medium text-warm-white">
+                            {row.price}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal delay={1}>
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-gold-400/5 border border-gold-400/15">
+                <Shield className="w-5 h-5 text-gold-400 flex-shrink-0" />
+                <p className="text-sm text-warm-white/60">
+                  <span className="text-gold-400 font-medium">
+                    72-hour full refund guarantee.
+                  </span>{" "}
+                  If we don&apos;t deliver within 72 hours, you get a complete
+                  refund — no questions asked.
+                </p>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Upload Section ───────────────────────────── */}
+      <section id="upload" className="py-20 border-b border-gold-400/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-14">
+              <h2 className="text-3xl font-bold text-warm-white mb-3">
+                Upload Your Document
+              </h2>
+              <p className="text-warm-white/50 max-w-lg mx-auto">
+                Upload your file and get an instant price estimate
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="max-w-2xl mx-auto">
+            <Reveal>
+              <div className="glass rounded-2xl p-8">
+                {!file ? (
+                  /* ─── Drop Zone ─── */
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`relative border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+                      isDragging
+                        ? "border-gold-400 bg-gold-400/10"
+                        : "border-white/[0.12] hover:border-gold-400/40 hover:bg-gold-400/5"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{doc.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-semibold ${selectedType === doc.id ? "text-gold-400" : "text-warm-white"}`}>
-                          {doc.title}
-                        </div>
-                        <div className="text-xs text-warm-white/40 mt-0.5 line-clamp-2">{doc.desc}</div>
-                      </div>
-                      {selectedType === doc.id && (
-                        <Check className="w-4 h-4 text-gold-400 flex-shrink-0" />
-                      )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleFile(f);
+                      }}
+                    />
+                    <div className="w-16 h-16 rounded-2xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mx-auto mb-5">
+                      <Upload className="w-7 h-7 text-gold-400" />
                     </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Party details */}
-            <div>
-              <h2 className="text-lg font-semibold text-warm-white mb-4 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-gold-400/20 text-gold-400 text-sm font-bold flex items-center justify-center">2</span>
-                Party Details
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-warm-white/60 mb-1.5 block">
-                    Party 1 / Your Name
-                  </label>
-                  <input
-                    type="text"
-                    value={party1}
-                    onChange={(e) => setParty1(e.target.value)}
-                    placeholder="e.g., Ahmed Mohammed Al-Rashidi"
-                    className="w-full glass rounded-xl px-4 py-3 text-sm text-warm-white/90 placeholder-warm-white/25 focus:outline-none focus:border-gold-400/50 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-warm-white/60 mb-1.5 block">
-                    Party 2 / Other Party
-                  </label>
-                  <input
-                    type="text"
-                    value={party2}
-                    onChange={(e) => setParty2(e.target.value)}
-                    placeholder="e.g., ABC Company LLC"
-                    className="w-full glass rounded-xl px-4 py-3 text-sm text-warm-white/90 placeholder-warm-white/25 focus:outline-none focus:border-gold-400/50 transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Main details */}
-            <div>
-              <h2 className="text-lg font-semibold text-warm-white mb-4 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-full bg-gold-400/20 text-gold-400 text-sm font-bold flex items-center justify-center">3</span>
-                Document Details
-                <span className="text-red-400 text-base">*</span>
-              </h2>
-              {selectedDocType && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  <span className="text-xs text-warm-white/30">Examples:</span>
-                  {selectedDocType.examples.map((ex) => (
-                    <button
-                      key={ex}
-                      onClick={() => setDetails((prev) => prev ? `${prev}, ${ex}` : ex)}
-                      className="text-xs px-2.5 py-1 rounded-full bg-gold-400/10 border border-gold-400/20 text-gold-400/70 hover:text-gold-400 hover:border-gold-400/40 transition-all"
-                    >
-                      + {ex}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <textarea
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="Describe the situation, key facts, amounts involved, dates, and what you need the document to accomplish..."
-                rows={5}
-                className="w-full glass rounded-xl px-4 py-3 text-sm text-warm-white/90 placeholder-warm-white/25 focus:outline-none focus:border-gold-400/50 transition-all resize-none"
-              />
-            </div>
-
-            {/* Additional info */}
-            <div>
-              <label className="text-sm text-warm-white/60 mb-1.5 block">
-                Additional Requirements (optional)
-              </label>
-              <textarea
-                value={additionalInfo}
-                onChange={(e) => setAdditionalInfo(e.target.value)}
-                placeholder="Any specific clauses, legal references, or formatting requirements..."
-                rows={3}
-                className="w-full glass rounded-xl px-4 py-3 text-sm text-warm-white/90 placeholder-warm-white/25 focus:outline-none focus:border-gold-400/50 transition-all resize-none"
-              />
-            </div>
-
-            {error && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-red-400">{error}</span>
-              </div>
-            )}
-
-            <button
-              onClick={generateDocument}
-              disabled={isGenerating || !selectedType || !details.trim()}
-              className="btn-primary w-full flex items-center justify-center gap-3 py-4 text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Generating Document...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5" />
-                  Generate Legal Document
-                  <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Right: Generated document */}
-          <div>
-            <div className="sticky top-20">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-warm-white flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full bg-gold-400/20 text-gold-400 text-sm font-bold flex items-center justify-center">4</span>
-                  Generated Document
-                </h2>
-                {generatedDoc && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={copyDocument}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-warm-white/60 hover:text-warm-white transition-all"
-                    >
-                      {copied ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-                    </button>
-                    <button
-                      onClick={downloadDocument}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold-400/15 hover:bg-gold-400/25 border border-gold-400/30 text-sm text-gold-400 transition-all"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="glass rounded-2xl min-h-[500px] max-h-[680px] overflow-y-auto">
-                {!generatedDoc && !isGenerating ? (
-                  <div className="flex flex-col items-center justify-center h-96 text-center p-8">
-                    <div className="w-16 h-16 rounded-2xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mb-4">
-                      <FileText className="w-8 h-8 text-gold-400/40" />
-                    </div>
-                    <p className="text-warm-white/30 text-sm">Your generated document will appear here</p>
-                    <p className="text-warm-white/20 text-xs mt-2">Fill in the form and click generate</p>
-                  </div>
-                ) : isGenerating && !generatedDoc ? (
-                  <div className="flex flex-col items-center justify-center h-96 text-center p-8">
-                    <div className="w-16 h-16 rounded-2xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mb-4">
-                      <Scale className="w-8 h-8 text-gold-400 animate-pulse" />
-                    </div>
-                    <p className="text-gold-400 text-sm font-medium">Drafting your legal document...</p>
-                    <p className="text-warm-white/30 text-xs mt-2">Applying UAE legal standards</p>
-                    <div className="flex gap-1 mt-4">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="w-2 h-2 rounded-full bg-gold-400/50"
-                          style={{ animation: `bounce 1s ease-in-out ${i * 0.2}s infinite` }}
-                        />
-                      ))}
+                    <p className="text-warm-white font-medium mb-2">
+                      {isDragging
+                        ? "Drop your file here"
+                        : "Drag & drop your document here"}
+                    </p>
+                    <p className="text-sm text-warm-white/40 mb-4">
+                      or click to browse files
+                    </p>
+                    <div className="flex items-center justify-center gap-4 text-xs text-warm-white/30">
+                      <span className="flex items-center gap-1.5">
+                        <File className="w-3.5 h-3.5" /> PDF
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Image className="w-3.5 h-3.5" /> JPG
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Image className="w-3.5 h-3.5" /> PNG
+                      </span>
+                      <span className="text-warm-white/20">Max 25MB</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-6">
-                    <div className="prose-legal text-sm">
-                      <ReactMarkdown>{generatedDoc}</ReactMarkdown>
-                      {isGenerating && (
-                        <span className="inline-block w-0.5 h-4 bg-gold-400 ml-0.5 animate-pulse align-middle" />
-                      )}
+                  /* ─── File Uploaded State ─── */
+                  <div className="space-y-6">
+                    {/* File info */}
+                    <div className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                      <div className="w-12 h-12 rounded-xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-gold-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-warm-white truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-warm-white/40">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={removeFile}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors"
+                      >
+                        <X className="w-4 h-4 text-warm-white/40" />
+                      </button>
                     </div>
+
+                    {/* Page count input */}
+                    <div>
+                      <label className="text-sm text-warm-white/60 mb-2 block">
+                        Number of Pages
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() =>
+                            setPageCount((c) => Math.max(1, c - 1))
+                          }
+                          className="w-10 h-10 rounded-xl glass glass-hover flex items-center justify-center text-warm-white/60 hover:text-warm-white text-lg font-medium"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={pageCount}
+                          onChange={(e) =>
+                            setPageCount(
+                              Math.max(1, parseInt(e.target.value) || 1)
+                            )
+                          }
+                          className="w-20 text-center glass rounded-xl px-3 py-2.5 text-warm-white font-medium focus:outline-none focus:border-gold-400/50 transition-all"
+                        />
+                        <button
+                          onClick={() => setPageCount((c) => c + 1)}
+                          className="w-10 h-10 rounded-xl glass glass-hover flex items-center justify-center text-warm-white/60 hover:text-warm-white text-lg font-medium"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Price breakdown */}
+                    <div className="glass rounded-xl p-5 space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-warm-white/50">
+                          Language Pair
+                        </span>
+                        <span className="text-warm-white font-medium flex items-center gap-2">
+                          English <ArrowRight className="w-3.5 h-3.5 text-gold-400" /> Arabic
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-warm-white/50">
+                          {pageCount} {pageCount === 1 ? "page" : "pages"} x AED{" "}
+                          {PRICE_PER_PAGE}
+                        </span>
+                        <span className="text-warm-white">
+                          AED {pageCount * PRICE_PER_PAGE}
+                        </span>
+                      </div>
+                      {pageCount * PRICE_PER_PAGE < MINIMUM_CHARGE && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-warm-white/50">
+                            Minimum charge applies
+                          </span>
+                          <span className="text-warm-white/40 line-through">
+                            AED {pageCount * PRICE_PER_PAGE}
+                          </span>
+                        </div>
+                      )}
+                      <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between">
+                        <span className="text-warm-white font-medium">
+                          Total
+                        </span>
+                        <span className="text-2xl font-bold gold-text">
+                          AED {calculatedPrice}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Delivery info */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex items-center gap-2 flex-1 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                        <Clock className="w-4 h-4 text-gold-400 flex-shrink-0" />
+                        <span className="text-sm text-warm-white/60">
+                          Delivery within{" "}
+                          <span className="text-warm-white font-medium">
+                            24 hours
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-1 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                        <Shield className="w-4 h-4 text-gold-400 flex-shrink-0" />
+                        <span className="text-sm text-warm-white/60">
+                          Full refund if not in{" "}
+                          <span className="text-warm-white font-medium">
+                            72 hours
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Checkout CTA */}
+                    <button
+                      onClick={handleCheckout}
+                      disabled={isCheckingOut}
+                      className="btn-primary w-full flex items-center justify-center gap-3 py-4 text-base rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCheckingOut ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Languages className="w-5 h-5" />
+                          Get Certified Translation — AED {calculatedPrice}
+                          <ChevronRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 mt-4">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-red-400">{error}</span>
                   </div>
                 )}
               </div>
-
-              {generatedDoc && (
-                <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-gold-400/5 border border-gold-400/15">
-                  <Scale className="w-4 h-4 text-gold-400/60 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-warm-white/40">
-                    This document is a professional template. Review and customize as needed, and have it reviewed by a licensed UAE attorney before official use.
-                  </p>
-                </div>
-              )}
-            </div>
+            </Reveal>
           </div>
         </div>
-      </div>
+      </section>
 
+      {/* ─── Document Types Section ───────────────────── */}
+      <section className="py-20 border-b border-gold-400/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-14">
+              <h2 className="text-3xl font-bold text-warm-white mb-3">
+                Supported Document Types
+              </h2>
+              <p className="text-warm-white/50 max-w-lg mx-auto">
+                We translate all types of legal and official documents
+              </p>
+            </div>
+          </Reveal>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto">
+            {documentTypes.map((doc, i) => (
+              <Reveal key={doc.label} delay={(i % 4) + 1}>
+                <div className="glass rounded-xl p-5 text-center glass-hover transition-all">
+                  <div className="w-11 h-11 rounded-xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mx-auto mb-3">
+                    <doc.icon className="w-5 h-5 text-gold-400" />
+                  </div>
+                  <p className="text-sm font-medium text-warm-white/80">
+                    {doc.label}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FAQ Section ──────────────────────────────── */}
+      <section className="py-20 border-b border-gold-400/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <Reveal>
+            <div className="text-center mb-14">
+              <h2 className="text-3xl font-bold text-warm-white mb-3">
+                Frequently Asked Questions
+              </h2>
+              <p className="text-warm-white/50 max-w-lg mx-auto">
+                Everything you need to know about our translation service
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="max-w-2xl mx-auto space-y-3">
+            {faqs.map((faq, i) => (
+              <Reveal key={i} delay={Math.min(i + 1, 3)}>
+                <div className="glass rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between p-5 text-left"
+                  >
+                    <span className="text-sm font-medium text-warm-white/90 pr-4">
+                      {faq.q}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-warm-white/40 flex-shrink-0 transition-transform duration-200 ${
+                        openFaq === i ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                  {openFaq === i && (
+                    <div className="px-5 pb-5 -mt-1">
+                      <p className="text-sm text-warm-white/50 leading-relaxed">
+                        {faq.a}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal delay={2}>
+            <div className="mt-10 text-center">
+              <div className="inline-flex items-center gap-3 p-4 rounded-xl glass">
+                <FileText className="w-5 h-5 text-gold-400" />
+                <p className="text-sm text-warm-white/60">
+                  Need to generate a legal document first?{" "}
+                  <Link
+                    href="/documents/generate"
+                    className="text-gold-400 hover:text-gold-300 font-medium inline-flex items-center gap-1 transition-colors"
+                  >
+                    Use our AI Document Generator
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ─── Footer ───────────────────────────────────── */}
       <Footer />
+
+      {/* ─── Login Modal ──────────────────────────────── */}
       <LoginModal isOpen={showLoginModal} />
-      <UpgradeModal
-        isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-      />
     </div>
   );
 }

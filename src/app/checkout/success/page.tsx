@@ -15,30 +15,25 @@ export default function CheckoutSuccessPage() {
     trackEvent("subscription_activated", { plan: "pro", price: "AED 49/mo" });
 
     // Trigger JWT refresh immediately so subscriptionStatus updates to "active"
-    // before the user lands back on /chat — this is what unblocks the pending message
     update();
-
-    // Also hit the subscription endpoint to force a Stripe re-check
     fetch("/api/subscription?refresh=true").catch(() => {});
 
-    // Trigger a second refresh after 2s to catch any timing delay from Stripe
-    const secondRefresh = setTimeout(() => {
-      update();
-    }, 2000);
+    // Second refresh after 2s to catch Stripe timing delay
+    const secondRefresh = setTimeout(() => update(), 2000);
 
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push("/chat");
-          return 0;
-        }
-        return prev - 1;
-      });
+    // Separate: countdown display (never calls router)
+    const countdownTimer = setInterval(() => {
+      setCountdown((prev) => Math.max(0, prev - 1));
     }, 1000);
 
+    // Separate: navigation timer — not entangled with state updates
+    const navTimer = setTimeout(() => {
+      router.push("/chat");
+    }, 4000);
+
     return () => {
-      clearInterval(timer);
+      clearInterval(countdownTimer);
+      clearTimeout(navTimer);
       clearTimeout(secondRefresh);
     };
   }, []);

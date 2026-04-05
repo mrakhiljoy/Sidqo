@@ -9,7 +9,8 @@ import { Scale, Menu, X, ArrowRight, LogOut, Crown, CreditCard } from "lucide-re
 
 const navLinks = [
   { href: "/chat", label: "AI Lawyer" },
-  { href: "/documents", label: "Documents" },
+  { href: "/documents", label: "Translate" },
+  { href: "/documents/generate", label: "Documents" },
   { href: "/cases", label: "Case Strategy" },
   { href: "/rights", label: "Know Your Rights" },
 ];

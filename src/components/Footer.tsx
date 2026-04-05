@@ -34,7 +34,8 @@ export default function Footer() {
             <ul className="space-y-3">
               {[
                 { href: "/chat", label: "AI Lawyer" },
-                { href: "/documents", label: "Documents" },
+                { href: "/documents", label: "Certified Translation" },
+                { href: "/documents/generate", label: "Document Generator" },
                 { href: "/cases", label: "Case Strategy" },
                 { href: "/rights", label: "Know Your Rights" },
               ].map(({ href, label }) => (
