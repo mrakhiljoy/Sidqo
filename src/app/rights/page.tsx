@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen,
   Briefcase,
@@ -10,7 +11,6 @@ import {
   Heart,
   Shield,
   Plane,
-  DollarSign,
   ShoppingCart,
   Globe,
   Scale,
@@ -18,18 +18,48 @@ import {
   ChevronRight,
   Loader2,
   ArrowRight,
+  AlertTriangle,
+  Clock,
+  Zap,
 } from "lucide-react";
 import Footer from "@/components/Footer";
 
+/* ── Easing tokens (Emil's philosophy: strong custom curves) ── */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+
+/* ── Stagger helpers ── */
+const staggerContainer = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.06 },
+  },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: EASE_OUT },
+  },
+};
+
+const fadeIn = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { duration: 0.3, ease: EASE_OUT },
+  },
+};
+
+/* ── Data ── */
 const rightsCategories = [
   {
     id: "employment",
     icon: Briefcase,
-    emoji: "👔",
     title: "Employee Rights",
-    color: "from-blue-500/15 to-blue-600/5",
-    border: "border-blue-500/20",
-    iconColor: "text-blue-400",
+    accent: "amber",
     topics: [
       "Working hours and overtime pay",
       "Annual leave and sick leave entitlements",
@@ -44,11 +74,8 @@ const rightsCategories = [
   {
     id: "tenancy",
     icon: Home,
-    emoji: "🏠",
     title: "Tenant Rights",
-    color: "from-emerald-500/15 to-emerald-600/5",
-    border: "border-emerald-500/20",
-    iconColor: "text-emerald-400",
+    accent: "emerald",
     topics: [
       "Maximum rent increase limits",
       "Eviction notice requirements",
@@ -63,11 +90,8 @@ const rightsCategories = [
   {
     id: "consumer",
     icon: ShoppingCart,
-    emoji: "🛒",
     title: "Consumer Rights",
-    color: "from-purple-500/15 to-purple-600/5",
-    border: "border-purple-500/20",
-    iconColor: "text-purple-400",
+    accent: "violet",
     topics: [
       "Right to refund and exchange",
       "Product warranty protections",
@@ -82,11 +106,8 @@ const rightsCategories = [
   {
     id: "criminal",
     icon: Shield,
-    emoji: "⚖️",
     title: "Rights When Arrested",
-    color: "from-red-500/15 to-red-600/5",
-    border: "border-red-500/20",
-    iconColor: "text-red-400",
+    accent: "red",
     topics: [
       "Right to be informed of charges",
       "Right to legal representation",
@@ -101,11 +122,8 @@ const rightsCategories = [
   {
     id: "immigration",
     icon: Plane,
-    emoji: "✈️",
     title: "Expat & Visa Rights",
-    color: "from-sky-500/15 to-sky-600/5",
-    border: "border-sky-500/20",
-    iconColor: "text-sky-400",
+    accent: "sky",
     topics: [
       "Visa cancellation rights",
       "Grace period after job loss",
@@ -120,11 +138,8 @@ const rightsCategories = [
   {
     id: "family",
     icon: Heart,
-    emoji: "👨‍👩‍👧",
     title: "Family Law Rights",
-    color: "from-pink-500/15 to-pink-600/5",
-    border: "border-pink-500/20",
-    iconColor: "text-pink-400",
+    accent: "pink",
     topics: [
       "Divorce rights for expats",
       "Child custody under UAE law",
@@ -138,43 +153,84 @@ const rightsCategories = [
   },
 ];
 
+const accentMap: Record<string, { bg: string; border: string; text: string; dot: string; iconBg: string }> = {
+  amber:   { bg: "bg-amber-500/8",   border: "border-amber-500/20",   text: "text-amber-400",   dot: "bg-amber-400",   iconBg: "bg-amber-500/10" },
+  emerald: { bg: "bg-emerald-500/8", border: "border-emerald-500/20", text: "text-emerald-400", dot: "bg-emerald-400", iconBg: "bg-emerald-500/10" },
+  violet:  { bg: "bg-violet-500/8",  border: "border-violet-500/20",  text: "text-violet-400",  dot: "bg-violet-400",  iconBg: "bg-violet-500/10" },
+  red:     { bg: "bg-red-500/8",     border: "border-red-500/20",     text: "text-red-400",     dot: "bg-red-400",     iconBg: "bg-red-500/10" },
+  sky:     { bg: "bg-sky-500/8",     border: "border-sky-500/20",     text: "text-sky-400",     dot: "bg-sky-400",     iconBg: "bg-sky-500/10" },
+  pink:    { bg: "bg-pink-500/8",    border: "border-pink-500/20",    text: "text-pink-400",    dot: "bg-pink-400",    iconBg: "bg-pink-500/10" },
+};
+
 const quickRightsCards = [
   {
-    title: "If you lose your job",
-    points: ["90-day grace period to find work or leave", "Full gratuity after 1+ year", "MOHRE complaint within 1 year", "Employer must pay all dues within 14 days"],
-    urgency: "normal",
+    title: "Lost your job",
+    icon: Clock,
+    points: [
+      "90-day grace period to find work or leave",
+      "Full gratuity after 1+ year of service",
+      "Employer must pay all dues within 14 days",
+    ],
+    urgency: "normal" as const,
     link: "/chat?q=termination",
   },
   {
-    title: "If your landlord wants to evict",
-    points: ["12-month notice required for personal use", "Must register via notary or court", "Can contest at Rental Dispute Centre", "Can't be evicted mid-tenancy without cause"],
-    urgency: "urgent",
+    title: "Facing eviction",
+    icon: AlertTriangle,
+    points: [
+      "12-month written notice required",
+      "Can contest at Rental Dispute Centre",
+      "Can't be evicted mid-tenancy without cause",
+    ],
+    urgency: "urgent" as const,
     link: "/chat?q=tenant",
   },
   {
-    title: "If you're arrested",
-    points: ["You have the right to remain silent", "Request your embassy be notified", "You must be charged within 48 hours", "Right to an attorney immediately"],
-    urgency: "critical",
+    title: "Being arrested",
+    icon: Shield,
+    points: [
+      "Right to remain silent",
+      "Must be charged within 48 hours",
+      "Right to an attorney immediately",
+    ],
+    urgency: "critical" as const,
     link: "/chat",
   },
   {
-    title: "If your salary is delayed",
-    points: ["Wage Protection System (WPS) rights", "File MOHRE complaint after 10 days", "Employer faces fines and license issues", "Can request immediate payment order"],
-    urgency: "urgent",
+    title: "Salary delayed",
+    icon: Zap,
+    points: [
+      "File MOHRE complaint after 10 days",
+      "Employer faces fines and license issues",
+      "Can request immediate payment order",
+    ],
+    urgency: "urgent" as const,
     link: "/chat",
   },
 ];
+
+const urgencyStyles = {
+  normal:   { card: "border-emerald-500/15 hover:border-emerald-500/30", badge: "bg-emerald-500/10 text-emerald-400", label: "Know your options" },
+  urgent:   { card: "border-amber-500/15 hover:border-amber-500/30", badge: "bg-amber-500/10 text-amber-400", label: "Act quickly" },
+  critical: { card: "border-red-500/15 hover:border-red-500/30", badge: "bg-red-500/10 text-red-400", label: "Urgent" },
+};
 
 export default function RightsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [explanation, setExplanation] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const explainRight = async (topic: string, categoryTitle: string) => {
     setSelectedTopic(topic);
     setExplanation("");
     setIsLoading(true);
+
+    // Scroll to panel on mobile
+    if (window.innerWidth < 1024 && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 
     try {
       const res = await fetch("/api/chat", {
@@ -224,200 +280,320 @@ export default function RightsPage() {
     }
   };
 
-  const urgencyColors = {
-    normal: "border-emerald-500/20 bg-emerald-500/5 text-emerald-400",
-    urgent: "border-amber-500/20 bg-amber-500/5 text-amber-400",
-    critical: "border-red-500/20 bg-red-500/5 text-red-400",
-  };
-
   return (
-    <div className="min-h-screen bg-navy-800">
-      {/* Hero */}
-      <section className="relative pt-28 pb-12 border-b border-gold-400/10">
-        <div className="absolute inset-0 mesh-bg pattern-overlay" />
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold-400/10 border border-gold-400/20 mb-5">
-              <BookOpen className="w-4 h-4 text-gold-400" />
-              <span className="text-sm text-gold-400 font-medium">UAE Legal Rights Guide</span>
+    <div className="min-h-screen bg-[var(--surface-0)]">
+      {/* ── Hero ── */}
+      <section className="relative pt-28 pb-14 overflow-hidden">
+        {/* Subtle radial glow */}
+        <div className="absolute inset-0 hero-gradient" />
+        <div className="absolute inset-0 geo-pattern" />
+
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: EASE_OUT }}
+            className="max-w-2xl"
+          >
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--gold)]/10 border border-[var(--gold)]/20 mb-6">
+              <Scale className="w-3.5 h-3.5 text-[var(--gold)]" />
+              <span className="text-xs font-medium text-[var(--gold)] tracking-wide uppercase">UAE Legal Rights</span>
             </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-warm-white mb-4">
-              Know Your
-              <span className="gold-text"> Legal Rights</span>
+            <h1 className="text-4xl sm:text-5xl font-bold text-[var(--text-primary)] leading-[1.1] mb-4 tracking-tight">
+              Know Your{" "}
+              <span className="gold-text">Legal Rights</span>
               <br />in the UAE
             </h1>
-            <p className="text-lg text-warm-white/60 leading-relaxed">
-              Understand your rights as an employee, tenant, consumer, resident, or visitor in the UAE. Click any topic to get a detailed explanation powered by UAE law.
+            <p className="text-base text-[var(--text-secondary)] leading-relaxed max-w-lg">
+              Understand your protections as an employee, tenant, consumer, or resident. Select any topic for a detailed AI-powered explanation with UAE law references.
             </p>
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* Quick rights cards */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 border-b border-gold-400/10">
-        <h2 className="text-xl font-semibold text-warm-white mb-5">
-          Common Situations — Know What to Do
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {quickRightsCards.map((card) => (
-            <div
-              key={card.title}
-              className={`rounded-xl border p-5 ${urgencyColors[card.urgency as keyof typeof urgencyColors]}`}
-            >
-              <h3 className="font-semibold text-sm mb-3">{card.title}</h3>
-              <ul className="space-y-1.5 mb-4">
-                {card.points.map((point) => (
-                  <li key={point} className="text-xs text-warm-white/60 flex items-start gap-1.5">
-                    <span className="mt-0.5 w-1 h-1 rounded-full bg-current flex-shrink-0" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={card.link}
-                className="text-xs font-medium flex items-center gap-1 hover:gap-2 transition-all"
-              >
-                Ask Sidqo <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ── Divider ── */}
+      <div className="divider-gold" />
 
-      {/* Main rights explorer */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Categories */}
-          <div className="lg:col-span-1 space-y-4">
-            <h2 className="text-lg font-semibold text-warm-white mb-4">
-              Browse by Category
-            </h2>
-            {rightsCategories.map((cat) => {
-              const Icon = cat.icon;
-              const isSelected = selectedCategory === cat.id;
-              return (
-                <div
-                  key={cat.id}
-                  className={`rounded-xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? `bg-gradient-to-br ${cat.color} ${cat.border}`
-                      : "glass border-gold-400/10 hover:border-gold-400/30"
-                  }`}
+      {/* ── Quick Situation Cards ── */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.15 }}
+          className="mb-6"
+        >
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            Common Situations
+          </h2>
+          <p className="text-sm text-[var(--text-muted)] mt-1">Quick answers for urgent legal questions</p>
+        </motion.div>
+
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+        >
+          {quickRightsCards.map((card) => {
+            const style = urgencyStyles[card.urgency];
+            const Icon = card.icon;
+            return (
+              <motion.div key={card.title} variants={fadeUp}>
+                <Link
+                  href={card.link}
+                  className={`group block rounded-2xl border bg-[var(--surface-1)] p-5 transition-[border-color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${style.card}`}
                 >
-                  <button
-                    onClick={() => setSelectedCategory(isSelected ? null : cat.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
-                  >
-                    <div className={`w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center ${cat.iconColor}`}>
-                      <Icon className="w-5 h-5" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-[var(--text-muted)]" />
+                      <h3 className="font-semibold text-sm text-[var(--text-primary)]">{card.title}</h3>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold ${isSelected ? cat.iconColor : "text-warm-white"}`}>
-                        {cat.title}
-                      </div>
-                      <div className="text-xs text-warm-white/40">{cat.topics.length} topics</div>
-                    </div>
-                    <ChevronRight
-                      className={`w-4 h-4 text-warm-white/30 transition-transform ${isSelected ? "rotate-90" : ""}`}
-                    />
-                  </button>
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${style.badge}`}>
+                      {style.label}
+                    </span>
+                  </div>
+                  <ul className="space-y-2 mb-4">
+                    {card.points.map((point) => (
+                      <li key={point} className="text-xs text-[var(--text-secondary)] flex items-start gap-2">
+                        <span className="mt-1.5 w-1 h-1 rounded-full bg-[var(--text-muted)] flex-shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                  <span className="text-xs font-medium text-[var(--gold)] flex items-center gap-1.5 group-hover:gap-2.5 transition-[gap] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]">
+                    Ask Sidqo <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </section>
 
-                  {isSelected && (
-                    <div className="px-4 pb-3 space-y-1">
-                      {cat.topics.map((topic) => (
-                        <button
-                          key={topic}
-                          onClick={() => explainRight(topic, cat.title)}
-                          className={`w-full text-left text-xs px-3 py-2 rounded-lg transition-all ${
-                            selectedTopic === topic
-                              ? `${cat.iconColor} font-medium bg-white/5`
-                              : "text-warm-white/50 hover:text-warm-white/80 hover:bg-white/5"
-                          }`}
+      {/* ── Divider ── */}
+      <div className="divider-gold" />
+
+      {/* ── Main Rights Explorer ── */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Categories sidebar */}
+          <div className="lg:col-span-4 xl:col-span-4">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.2 }}
+              className="mb-5"
+            >
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Browse by Category</h2>
+              <p className="text-sm text-[var(--text-muted)] mt-1">Select a topic for detailed legal guidance</p>
+            </motion.div>
+
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              className="space-y-2"
+            >
+              {rightsCategories.map((cat) => {
+                const Icon = cat.icon;
+                const isSelected = selectedCategory === cat.id;
+                const colors = accentMap[cat.accent];
+
+                return (
+                  <motion.div
+                    key={cat.id}
+                    variants={fadeUp}
+                    layout
+                    className={`rounded-xl border overflow-hidden transition-[border-color,background-color] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                      isSelected
+                        ? `${colors.bg} ${colors.border}`
+                        : "border-white/[0.06] bg-[var(--surface-1)] hover:border-white/[0.12]"
+                    }`}
+                  >
+                    <button
+                      onClick={() => {
+                        setSelectedCategory(isSelected ? null : cat.id);
+                        if (isSelected) {
+                          setSelectedTopic(null);
+                          setExplanation("");
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98]"
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSelected ? colors.iconBg : "bg-white/[0.04]"}`}>
+                        <Icon className={`w-4 h-4 ${isSelected ? colors.text : "text-[var(--text-muted)]"}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-medium ${isSelected ? colors.text : "text-[var(--text-primary)]"}`}>
+                          {cat.title}
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)]">{cat.topics.length} topics</div>
+                      </div>
+                      <motion.div
+                        animate={{ rotate: isSelected ? 90 : 0 }}
+                        transition={{ duration: 0.2, ease: EASE_OUT }}
+                      >
+                        <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
+                      </motion.div>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isSelected && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: EASE_IN_OUT }}
+                          className="overflow-hidden"
                         >
-                          <span className="mr-1.5 text-warm-white/20">→</span>
-                          {topic}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                          <div className="px-4 pb-3 space-y-0.5">
+                            {cat.topics.map((topic, i) => (
+                              <motion.button
+                                key={topic}
+                                initial={{ opacity: 0, x: -6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{
+                                  duration: 0.2,
+                                  ease: EASE_OUT,
+                                  delay: i * 0.03,
+                                }}
+                                onClick={() => explainRight(topic, cat.title)}
+                                className={`w-full text-left text-[13px] px-3 py-2 rounded-lg transition-[background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] ${
+                                  selectedTopic === topic
+                                    ? `${colors.text} font-medium bg-white/[0.06]`
+                                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.04]"
+                                }`}
+                              >
+                                <span className={`inline-block w-1 h-1 rounded-full mr-2 align-middle ${
+                                  selectedTopic === topic ? colors.dot : "bg-[var(--text-muted)]"
+                                }`} />
+                                {topic}
+                              </motion.button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
           </div>
 
           {/* Explanation panel */}
-          <div className="lg:col-span-2">
-            <div className="glass rounded-2xl min-h-[500px]">
-              {!selectedTopic && !isLoading ? (
-                <div className="flex flex-col items-center justify-center h-96 text-center p-8">
-                  <div className="w-20 h-20 rounded-3xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mb-5">
-                    <BookOpen className="w-10 h-10 text-gold-400/40" />
-                  </div>
-                  <p className="text-warm-white/30 text-sm mb-2">Select a category and topic to learn about your rights</p>
-                  <p className="text-warm-white/20 text-xs max-w-xs">
-                    Each topic provides a detailed explanation with UAE law references, practical steps, and examples.
-                  </p>
+          <div ref={panelRef} className="lg:col-span-8 xl:col-span-8">
+            <div className="card-surface rounded-2xl min-h-[520px] sticky top-24">
+              <AnimatePresence mode="wait">
+                {!selectedTopic && !isLoading ? (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
+                    transition={{ duration: 0.25, ease: EASE_OUT }}
+                    className="flex flex-col items-center justify-center h-[520px] text-center p-8"
+                  >
+                    <div className="w-16 h-16 rounded-2xl bg-[var(--gold)]/8 border border-[var(--gold)]/15 flex items-center justify-center mb-5">
+                      <BookOpen className="w-8 h-8 text-[var(--gold)]/30" />
+                    </div>
+                    <p className="text-[var(--text-secondary)] text-sm mb-1.5">
+                      Select a category and topic
+                    </p>
+                    <p className="text-[var(--text-muted)] text-xs max-w-sm">
+                      Get detailed explanations with UAE law references, practical steps, and real-world examples.
+                    </p>
 
-                  <div className="mt-8 grid grid-cols-3 gap-3">
-                    {[
-                      { icon: Globe, label: "UAE Federal Law" },
-                      { icon: Scale, label: "Emirate Laws" },
-                      { icon: Shield, label: "DIFC & ADGM" },
-                    ].map(({ icon: Icon, label }) => (
-                      <div key={label} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/3 border border-white/5">
-                        <Icon className="w-4 h-4 text-gold-400/40" />
-                        <span className="text-xs text-warm-white/25">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : isLoading && !explanation ? (
-                <div className="flex flex-col items-center justify-center h-96 text-center p-8">
-                  <div className="w-16 h-16 rounded-2xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center mb-4">
-                    <Scale className="w-8 h-8 text-gold-400 animate-pulse" />
-                  </div>
-                  <p className="text-gold-400 text-sm font-medium mb-1">Researching UAE law...</p>
-                  <p className="text-warm-white/30 text-xs">{selectedTopic}</p>
-                  <Loader2 className="w-5 h-5 text-gold-400/40 animate-spin mt-4" />
-                </div>
-              ) : (
-                <div className="p-6">
-                  <div className="mb-4 pb-4 border-b border-gold-400/10">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center flex-shrink-0">
-                        <Scale className="w-4 h-4 text-navy-900" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-warm-white text-base">{selectedTopic}</h3>
-                        <p className="text-xs text-warm-white/40 mt-0.5">UAE Legal Rights Explanation by Sidqo</p>
+                    <div className="mt-8 flex gap-3">
+                      {[
+                        { icon: Globe, label: "Federal Law" },
+                        { icon: Scale, label: "Emirate Laws" },
+                        { icon: Shield, label: "DIFC & ADGM" },
+                      ].map(({ icon: I, label }) => (
+                        <div
+                          key={label}
+                          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]"
+                        >
+                          <I className="w-3.5 h-3.5 text-[var(--gold)]/30" />
+                          <span className="text-xs text-[var(--text-muted)]">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                ) : isLoading && !explanation ? (
+                  <motion.div
+                    key="loading"
+                    initial={{ opacity: 0, scale: 0.97 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
+                    transition={{ duration: 0.25, ease: EASE_OUT }}
+                    className="flex flex-col items-center justify-center h-[520px] text-center p-8"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-[var(--gold)]/10 border border-[var(--gold)]/20 flex items-center justify-center mb-4">
+                      <Scale className="w-7 h-7 text-[var(--gold)] animate-pulse" />
+                    </div>
+                    <p className="text-[var(--gold)] text-sm font-medium mb-1">Researching UAE law...</p>
+                    <p className="text-[var(--text-muted)] text-xs max-w-xs">{selectedTopic}</p>
+                    <Loader2 className="w-4 h-4 text-[var(--gold)]/40 animate-spin mt-4" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="content"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.3, ease: EASE_OUT }}
+                    className="p-6 sm:p-8"
+                  >
+                    <div className="mb-5 pb-5 border-b border-white/[0.06]">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--gold)] to-[#D97706] flex items-center justify-center flex-shrink-0">
+                          <Scale className="w-4 h-4 text-[var(--surface-0)]" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-[var(--text-primary)] text-base leading-tight">
+                            {selectedTopic}
+                          </h3>
+                          <p className="text-xs text-[var(--text-muted)] mt-1">
+                            UAE Legal Rights Explanation by Sidqo
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="prose-legal text-sm">
-                    <ReactMarkdown>{explanation}</ReactMarkdown>
-                    {isLoading && (
-                      <span className="inline-block w-0.5 h-4 bg-gold-400 ml-0.5 animate-pulse align-middle" />
-                    )}
-                  </div>
-                  {explanation && !isLoading && (
-                    <div className="mt-5 pt-4 border-t border-gold-400/10 flex flex-wrap gap-3">
-                      <Link
-                        href="/chat"
-                        className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-gold-400/15 border border-gold-400/30 text-gold-400 hover:bg-gold-400/25 transition-all"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        Ask follow-up questions
-                      </Link>
-                      <Link
-                        href="/cases"
-                        className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-warm-white/60 hover:text-warm-white hover:bg-white/10 transition-all"
-                      >
-                        Build a case strategy
-                      </Link>
+
+                    <div className="prose-legal text-sm">
+                      <ReactMarkdown>{explanation}</ReactMarkdown>
+                      {isLoading && (
+                        <span className="inline-block w-0.5 h-4 bg-[var(--gold)] ml-0.5 animate-pulse align-middle" />
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+
+                    <AnimatePresence>
+                      {explanation && !isLoading && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, ease: EASE_OUT, delay: 0.1 }}
+                          className="mt-6 pt-5 border-t border-white/[0.06] flex flex-wrap gap-3"
+                        >
+                          <Link
+                            href="/chat"
+                            className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/25 text-[var(--gold)] hover:bg-[var(--gold)]/15 transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            Ask follow-up questions
+                          </Link>
+                          <Link
+                            href="/cases"
+                            className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/[0.06] transition-[background-color,color,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
+                          >
+                            Build a case strategy
+                          </Link>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
