@@ -168,10 +168,28 @@ const floatingPrompts = [
   { text: "Forced to resign — is that legal?", x: "50%", y: "40%", delay: "1.5s" },
 ];
 
+/* ─── FAQ Schema ─────────────────────────────────── */
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map(({ q, a }) => ({
+    "@type": "Question",
+    name: q,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: a,
+    },
+  })),
+};
+
 /* ─── Page ────────────────────────────────────────── */
 export default function HomePage() {
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       {/* ═══════ HERO ═══════ */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden hero-gradient">
         {/* Subtle geometric pattern */}
