@@ -8,6 +8,11 @@ export default auth((req) => {
   const protectedPaths = ["/api/chat", "/api/documents", "/api/cases", "/api/translate", "/api/upload"];
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
 
+  // Vendor submission uses HMAC token auth instead of user sessions
+  if (pathname.startsWith("/api/translate/vendor")) {
+    return NextResponse.next();
+  }
+
   if (isProtected && !req.auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

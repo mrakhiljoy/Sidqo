@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getJob, updateJob } from "@/lib/translations";
+import { getSignedDownloadUrl } from "@/lib/storage";
 
 export async function GET(
   req: NextRequest,
@@ -12,17 +13,26 @@ export async function GET(
   }
 
   const { id } = await params;
-  const job = getJob(id);
+  const job = await getJob(id);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  // Users can only see their own jobs (admin bypass for now)
   if (job.userEmail !== session.user.email) {
-    // In production, check admin role
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  return NextResponse.json({ job });
+  // Mint a fresh signed URL for the deliverable when completed
+  let deliverableUrl: string | null = null;
+  if (job.status === "completed" && job.deliverableStoragePath) {
+    deliverableUrl = await getSignedDownloadUrl(
+      "translation-deliverables",
+      job.deliverableStoragePath,
+      60 * 60 // 1 hour
+    );
+  }
+
+  return NextResponse.json({ job, deliverableUrl });
 }
 
 export async function PATCH(
@@ -37,7 +47,6 @@ export async function PATCH(
   const { id } = await params;
   const updates = await req.json();
 
-  // Sanitize: only allow certain fields to be updated
   const allowed: Record<string, boolean> = {
     status: true,
     vendorId: true,
@@ -53,7 +62,7 @@ export async function PATCH(
     if (allowed[key]) sanitized[key] = value;
   }
 
-  const job = updateJob(id, sanitized);
+  const job = await updateJob(id, sanitized);
   if (!job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }

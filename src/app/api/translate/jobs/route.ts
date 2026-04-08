@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   // For admin: return all jobs. For users: return only their jobs.
   // In production, add proper admin role checking.
-  const jobs = isAdmin ? getAllJobs() : getJobsByUser(session.user.email);
+  const jobs = isAdmin ? await getAllJobs() : await getJobsByUser(session.user.email);
 
   return NextResponse.json({ jobs });
 }
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const data = await req.json();
-    const job = createJob({
+    const job = await createJob({
       userId: session.user.id || session.user.email,
       userEmail: session.user.email,
       userName: session.user.name || undefined,

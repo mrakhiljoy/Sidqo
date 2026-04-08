@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { GEMINI_API_KEY } from "@/lib/env";
+import { auth } from "@/lib/auth";
+import { uploadSourceFile } from "@/lib/storage";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 const ALLOWED_TYPES: Record<string, string> = {
@@ -77,6 +79,18 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Persist source file to Supabase Storage (for later vendor dispatch).
+    // Non-fatal: if storage is misconfigured we still return extracted text.
+    let storagePath: string | null = null;
+    try {
+      const session = await auth();
+      const email = session?.user?.email || "anonymous";
+      storagePath = await uploadSourceFile(email, file.name, buffer, file.type);
+    } catch (e) {
+      console.error("Source file storage failed (non-fatal):", e);
+    }
+
     let extractedText = "";
     let pageCount: number | undefined;
 
@@ -132,6 +146,7 @@ export async function POST(req: Request) {
       needsTranslation,
       detectedLanguage,
       wasTranslated: !!translatedText,
+      storagePath,
     });
   } catch (error) {
     console.error("Upload processing error:", error);

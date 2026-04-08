@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { pages, documentType, filename } = await req.json();
+    const { pages, documentType, filename, storagePath } = await req.json();
 
     if (!pages || pages < 1) {
       return NextResponse.json(
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Create job in pending_payment state
-    const job = createJob({
+    const job = await createJob({
       userId: session.user.id || session.user.email,
       userEmail: session.user.email,
       userName: session.user.name || undefined,
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       priceAed: pricing.totalAed,
       vendorPayoutAed: pricing.vendorCost,
       dispatchChannel: "email",
+      sourceStoragePath: storagePath,
     });
 
     const origin = req.nextUrl.origin;
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Link checkout session to job
-    updateJob(job.id, { stripeCheckoutSessionId: checkoutSession.id });
+    await updateJob(job.id, { stripeCheckoutSessionId: checkoutSession.id });
 
     return NextResponse.json({ url: checkoutSession.url, jobId: job.id });
   } catch (error) {
