@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PDFParse } from "pdf-parse";
 
 // Public endpoint — no auth required (just reads file bytes, creates nothing)
 export async function POST(req: NextRequest) {
@@ -15,18 +16,16 @@ export async function POST(req: NextRequest) {
     let wordCount = 0;
 
     if (file.type === "application/pdf") {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse");
-      const data = await pdfParse(buffer);
-      pageCount = data.numpages || 1;
-      wordCount = data.text
-        ? data.text.split(/\s+/).filter((w: string) => w.length > 0).length
+      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      const info = await parser.getInfo();
+      const textResult = await parser.getText();
+      pageCount = info?.total || 1;
+      wordCount = textResult?.text
+        ? textResult.text.split(/\s+/).filter((w: string) => w.length > 0).length
         : 0;
-    } else if (
-      file.type === "image/jpeg" ||
-      file.type === "image/png"
-    ) {
-      // Images are always 1 page; no word count extraction without OCR
+      await parser.destroy();
+    } else if (file.type === "image/jpeg" || file.type === "image/png") {
+      // Images: 1 page, no word count without OCR
       pageCount = 1;
       wordCount = 0;
     }

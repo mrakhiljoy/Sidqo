@@ -79,7 +79,6 @@ function Reveal({
 /* ─── Constants ──────────────────────────────────── */
 const PRICE_PER_WORD = 0.15; // AED 0.15 / word
 const MINIMUM_CHARGE = 69;   // AED minimum
-const PENDING_TRANSLATE_KEY = "sidqo_pending_translate";
 
 function calcPrice(words: number) {
   return Math.max(Math.round(words * PRICE_PER_WORD * 100) / 100, MINIMUM_CHARGE);
@@ -105,7 +104,7 @@ const steps = [
     number: "02",
     title: "Transparent Payment",
     description:
-      "See per-page pricing instantly. Pay securely with Stripe checkout.",
+      "See word-count pricing instantly. Pay securely with Stripe checkout.",
     icon: CreditCard,
     color: "from-teal-400/20 to-teal-400/5",
   },
@@ -120,11 +119,11 @@ const steps = [
 ];
 
 const pricingTable = [
-  { type: "AI Chat Response", pages: "1-2 pages", price: "AED 69" },
-  { type: "Legal Memorandum", pages: "2-4 pages", price: "AED 90-180" },
-  { type: "Uploaded Doc (1-3 pg)", pages: "1-3 pages", price: "AED 69-135" },
-  { type: "Uploaded Doc (4-10 pg)", pages: "4-10 pages", price: "AED 180-450" },
-  { type: "10+ pages", pages: "10+ pages", price: "Custom quote" },
+  { type: "Short Form / 1-page", pages: "≤ 460 words", price: "AED 69" },
+  { type: "Legal Memorandum", pages: "500 – 1,000 words", price: "AED 75 – 150" },
+  { type: "Contract / Agreement", pages: "1,000 – 3,000 words", price: "AED 150 – 450" },
+  { type: "Court Filing / Judgment", pages: "3,000 – 6,000 words", price: "AED 450 – 900" },
+  { type: "Large Document", pages: "6,000+ words", price: "AED 900+" },
 ];
 
 const documentTypes = [
@@ -229,7 +228,7 @@ function FaqItem({
 
 /* ─── Page Component ─────────────────────────────── */
 export default function TranslatePage() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(1);
@@ -241,38 +240,9 @@ export default function TranslatePage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [pendingFilename, setPendingFilename] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const calculatedPrice = calcPrice(wordCount || pageCount * 250);
-
-  // ── Post-login recovery: if user just logged in and had a pending upload ──
-  useEffect(() => {
-    if (!session) return;
-    try {
-      const raw = localStorage.getItem(PENDING_TRANSLATE_KEY);
-      if (!raw) return;
-      const pending = JSON.parse(raw) as {
-        filename: string;
-        wordCount: number;
-        pageCount: number;
-        storagePath: string | null;
-        ts: number;
-      };
-      // Expire after 30 min
-      if (Date.now() - pending.ts > 30 * 60 * 1000) {
-        localStorage.removeItem(PENDING_TRANSLATE_KEY);
-        return;
-      }
-      localStorage.removeItem(PENDING_TRANSLATE_KEY);
-      setWordCount(pending.wordCount);
-      setPageCount(pending.pageCount);
-      setStoragePath(pending.storagePath);
-      setPendingFilename(pending.filename);
-    } catch {
-      // ignore
-    }
-  }, [session]);
 
   const analyzeFile = async (f: File) => {
     setIsAnalyzing(true);
@@ -353,7 +323,6 @@ export default function TranslatePage() {
     setPageCount(1);
     setWordCount(0);
     setStoragePath(null);
-    setPendingFilename(null);
     setIsAnalyzing(false);
     setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -367,26 +336,7 @@ export default function TranslatePage() {
 
   const handleCheckout = async () => {
     const effectiveWordCount = wordCount || pageCount * 250;
-    const filename = file?.name || pendingFilename || "";
-
-    if (!session) {
-      // Persist analysis state before login redirect so we can recover after
-      try {
-        localStorage.setItem(
-          PENDING_TRANSLATE_KEY,
-          JSON.stringify({
-            filename,
-            wordCount: effectiveWordCount,
-            pageCount,
-            storagePath,
-            ts: Date.now(),
-          })
-        );
-      } catch { /* ignore storage errors */ }
-      setShowLoginModal(true);
-      trackEvent("login_modal_shown", { trigger: "translate_checkout" });
-      return;
-    }
+    const filename = file?.name || "";
 
     setIsCheckingOut(true);
     setError("");
@@ -534,26 +484,32 @@ export default function TranslatePage() {
                       </div>
                     </div>
 
-                    {/* Post-login recovery banner */}
-                    {!file && pendingFilename && (
-                      <div className="mb-4 flex items-start gap-3 p-3.5 rounded-xl bg-gold-400/10 border border-gold-400/20">
-                        <Check className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white/90">
-                            Welcome back! Re-select your file to continue.
-                          </p>
-                          <p className="text-xs text-white/50 mt-0.5 truncate">
-                            {pendingFilename} — {(wordCount || pageCount * 250).toLocaleString()} words · AED {calculatedPrice}
+                    {/* Not logged in — login gate */}
+                    {sessionStatus !== "loading" && !session ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-5 text-center">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-400/15 to-gold-400/5 border border-gold-400/20 flex items-center justify-center">
+                          <Languages className="w-7 h-7 text-gold-400" />
+                        </div>
+                        <div>
+                          <p className="text-white font-semibold mb-1">Sign in to get started</p>
+                          <p className="text-sm text-white/40 max-w-[240px]">
+                            Create a free account to upload your document and get an instant price.
                           </p>
                         </div>
-                        <button onClick={() => fileInputRef.current?.click()} className="text-xs text-gold-400 underline whitespace-nowrap cursor-pointer">
-                          Browse
+                        <button
+                          onClick={() => {
+                            setShowLoginModal(true);
+                            trackEvent("login_modal_shown", { trigger: "translate_upload_gate" });
+                          }}
+                          className="btn-primary px-8 py-3 flex items-center gap-2"
+                        >
+                          <Key className="w-4 h-4" />
+                          Sign in free
                         </button>
+                        <p className="text-xs text-white/25">No payment required to see your price</p>
                       </div>
-                    )}
-
-                    {!file ? (
-                      /* ─── Drop Zone ─── */
+                    ) : !file ? (
+                      /* ─── Drop Zone (logged in) ─── */
                       <div
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -823,7 +779,7 @@ export default function TranslatePage() {
                 Transparent Pricing
               </div>
               <h2 className="text-3xl sm:text-4xl font-display font-bold text-white mb-3">
-                Simple Per-Page Pricing
+                Simple Word-Based Pricing
               </h2>
               <p className="text-white/40 max-w-md mx-auto">
                 No hidden fees. Pay only for what you need.
@@ -842,17 +798,17 @@ export default function TranslatePage() {
                   <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6 mb-10">
                     <div>
                       <p className="text-sm text-white/40 mb-2">
-                        Per-page rate
+                        Per-word rate
                       </p>
                       <div className="flex items-baseline gap-1">
                         <span className="text-lg text-white/50 font-medium">
                           AED
                         </span>
                         <span className="text-5xl font-display font-bold gold-text">
-                          45
+                          0.15
                         </span>
                         <span className="text-base text-white/30">
-                          /page
+                          /word
                         </span>
                       </div>
                     </div>
@@ -875,7 +831,7 @@ export default function TranslatePage() {
                             Document Type
                           </th>
                           <th className="text-left text-xs text-white/30 font-medium py-3 px-2 uppercase tracking-wider">
-                            Size
+                            Approx. Word Count
                           </th>
                           <th className="text-right text-xs text-white/30 font-medium py-3 px-2 uppercase tracking-wider">
                             Price
