@@ -77,8 +77,13 @@ function Reveal({
 }
 
 /* ─── Constants ──────────────────────────────────── */
-const PRICE_PER_PAGE = 45;
-const MINIMUM_CHARGE = 69;
+const PRICE_PER_WORD = 0.15; // AED 0.15 / word
+const MINIMUM_CHARGE = 69;   // AED minimum
+const PENDING_TRANSLATE_KEY = "sidqo_pending_translate";
+
+function calcPrice(words: number) {
+  return Math.max(Math.round(words * PRICE_PER_WORD * 100) / 100, MINIMUM_CHARGE);
+}
 
 const stats = [
   { value: "24hr", label: "Delivery", icon: Clock },
@@ -229,20 +234,53 @@ export default function TranslatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const [wordCount, setWordCount] = useState(0);
+  const [storagePath, setStoragePath] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [pendingFilename, setPendingFilename] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const calculatedPrice = Math.max(pageCount * PRICE_PER_PAGE, MINIMUM_CHARGE);
+  const calculatedPrice = calcPrice(wordCount || pageCount * 250);
+
+  // ── Post-login recovery: if user just logged in and had a pending upload ──
+  useEffect(() => {
+    if (!session) return;
+    try {
+      const raw = localStorage.getItem(PENDING_TRANSLATE_KEY);
+      if (!raw) return;
+      const pending = JSON.parse(raw) as {
+        filename: string;
+        wordCount: number;
+        pageCount: number;
+        storagePath: string | null;
+        ts: number;
+      };
+      // Expire after 30 min
+      if (Date.now() - pending.ts > 30 * 60 * 1000) {
+        localStorage.removeItem(PENDING_TRANSLATE_KEY);
+        return;
+      }
+      localStorage.removeItem(PENDING_TRANSLATE_KEY);
+      setWordCount(pending.wordCount);
+      setPageCount(pending.pageCount);
+      setStoragePath(pending.storagePath);
+      setPendingFilename(pending.filename);
+    } catch {
+      // ignore
+    }
+  }, [session]);
 
   const analyzeFile = async (f: File) => {
     setIsAnalyzing(true);
+    setStoragePath(null);
     try {
       const formData = new FormData();
       formData.append("file", f);
+      // Public endpoint — works without login, just extracts word/page count
       const res = await fetch("/api/translate/analyze", {
         method: "POST",
         body: formData,
@@ -253,9 +291,26 @@ export default function TranslatePage() {
         setWordCount(data.wordCount || 0);
       }
     } catch {
-      // Silently fall back to manual entry
+      // Fall back: estimate 250 words per page
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Upload file to storage (requires login) — called at checkout time
+  const uploadFile = async (f: File): Promise<string | null> => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", f);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.storagePath ?? null;
+    } catch {
+      return null;
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -297,6 +352,8 @@ export default function TranslatePage() {
     setFile(null);
     setPageCount(1);
     setWordCount(0);
+    setStoragePath(null);
+    setPendingFilename(null);
     setIsAnalyzing(false);
     setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -309,7 +366,23 @@ export default function TranslatePage() {
   };
 
   const handleCheckout = async () => {
+    const effectiveWordCount = wordCount || pageCount * 250;
+    const filename = file?.name || pendingFilename || "";
+
     if (!session) {
+      // Persist analysis state before login redirect so we can recover after
+      try {
+        localStorage.setItem(
+          PENDING_TRANSLATE_KEY,
+          JSON.stringify({
+            filename,
+            wordCount: effectiveWordCount,
+            pageCount,
+            storagePath,
+            ts: Date.now(),
+          })
+        );
+      } catch { /* ignore storage errors */ }
       setShowLoginModal(true);
       trackEvent("login_modal_shown", { trigger: "translate_checkout" });
       return;
@@ -318,19 +391,27 @@ export default function TranslatePage() {
     setIsCheckingOut(true);
     setError("");
     try {
+      // Upload source file to storage now (requires auth)
+      let path = storagePath;
+      if (file && !path) {
+        path = await uploadFile(file);
+        if (path) setStoragePath(path);
+      }
+
       const res = await fetch("/api/translate/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pages: pageCount,
+          wordCount: effectiveWordCount,
           documentType: "uploaded_doc",
-          filename: file?.name,
+          filename,
+          storagePath: path,
         }),
       });
       const data = await res.json();
       if (data.url) {
         trackEvent("translate_checkout_started", {
-          pages: pageCount,
+          wordCount: effectiveWordCount,
           price: calculatedPrice,
         });
         window.location.href = data.url;
@@ -394,7 +475,7 @@ export default function TranslatePage() {
                 <p className="text-lg text-white/50 leading-relaxed mb-8 max-w-lg">
                   MOJ-certified translators deliver court-accepted Arabic
                   translations of your legal documents. Transparent pricing
-                  starting at AED 45/page.
+                  at AED 0.15/word — minimum AED 69.
                 </p>
               </Reveal>
               <Reveal delay={3}>
@@ -452,6 +533,24 @@ export default function TranslatePage() {
                         Secure & Encrypted
                       </div>
                     </div>
+
+                    {/* Post-login recovery banner */}
+                    {!file && pendingFilename && (
+                      <div className="mb-4 flex items-start gap-3 p-3.5 rounded-xl bg-gold-400/10 border border-gold-400/20">
+                        <Check className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white/90">
+                            Welcome back! Re-select your file to continue.
+                          </p>
+                          <p className="text-xs text-white/50 mt-0.5 truncate">
+                            {pendingFilename} — {(wordCount || pageCount * 250).toLocaleString()} words · AED {calculatedPrice}
+                          </p>
+                        </div>
+                        <button onClick={() => fileInputRef.current?.click()} className="text-xs text-gold-400 underline whitespace-nowrap cursor-pointer">
+                          Browse
+                        </button>
+                      </div>
+                    )}
 
                     {!file ? (
                       /* ─── Drop Zone ─── */
@@ -539,44 +638,32 @@ export default function TranslatePage() {
                           </button>
                         </div>
 
-                        {/* Page count */}
+                        {/* Word count display (pricing unit) */}
                         <div>
                           <label className="text-sm text-white/50 mb-2.5 block">
-                            Number of Pages
-                            {!isAnalyzing && pageCount > 0 && (
-                              <span className="text-gold-400/60 ml-1.5 text-xs">
-                                (auto-detected)
-                              </span>
+                            Word Count
+                            {!isAnalyzing && wordCount > 0 && (
+                              <span className="text-gold-400/60 ml-1.5 text-xs">(auto-detected)</span>
                             )}
                           </label>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() =>
-                                setPageCount((c) => Math.max(1, c - 1))
-                              }
+                              onClick={() => setWordCount((c) => Math.max(50, c - 50))}
                               className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.08] text-lg font-medium transition-all cursor-pointer"
-                              aria-label="Decrease page count"
-                            >
-                              -
-                            </button>
+                              aria-label="Decrease word count"
+                            >-</button>
                             <input
                               type="number"
                               min={1}
-                              value={pageCount}
-                              onChange={(e) =>
-                                setPageCount(
-                                  Math.max(1, parseInt(e.target.value) || 1)
-                                )
-                              }
-                              className="w-16 text-center rounded-xl px-3 py-2.5 bg-white/[0.04] border border-white/[0.08] text-white font-medium focus:outline-none focus:border-gold-400/50 transition-all"
+                              value={wordCount || pageCount * 250}
+                              onChange={(e) => setWordCount(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-24 text-center rounded-xl px-3 py-2.5 bg-white/[0.04] border border-white/[0.08] text-white font-medium focus:outline-none focus:border-gold-400/50 transition-all"
                             />
                             <button
-                              onClick={() => setPageCount((c) => c + 1)}
+                              onClick={() => setWordCount((c) => (c || pageCount * 250) + 50)}
                               className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.08] text-lg font-medium transition-all cursor-pointer"
-                              aria-label="Increase page count"
-                            >
-                              +
-                            </button>
+                              aria-label="Increase word count"
+                            >+</button>
                           </div>
                         </div>
 
@@ -590,30 +677,33 @@ export default function TranslatePage() {
                               Arabic
                             </span>
                           </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-white/40">
-                              {pageCount}{" "}
-                              {pageCount === 1 ? "page" : "pages"} x AED{" "}
-                              {PRICE_PER_PAGE}
-                            </span>
-                            <span className="text-white/80">
-                              AED {pageCount * PRICE_PER_PAGE}
-                            </span>
-                          </div>
-                          {pageCount * PRICE_PER_PAGE < MINIMUM_CHARGE && (
+                          {wordCount > 0 ? (
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-white/40">
-                                Minimum charge
+                                {wordCount.toLocaleString()} words × AED {PRICE_PER_WORD}
                               </span>
-                              <span className="text-white/30 line-through">
-                                AED {pageCount * PRICE_PER_PAGE}
+                              <span className="text-white/80">
+                                AED {(wordCount * PRICE_PER_WORD).toFixed(2)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-white/40">
+                                {pageCount} {pageCount === 1 ? "page" : "pages"} (~{(pageCount * 250).toLocaleString()} words)
+                              </span>
+                              <span className="text-white/80">
+                                AED {(pageCount * 250 * PRICE_PER_WORD).toFixed(2)}
                               </span>
                             </div>
                           )}
+                          {(wordCount || pageCount * 250) * PRICE_PER_WORD < MINIMUM_CHARGE && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-white/40">Minimum charge applied</span>
+                              <span className="text-xs text-gold-400/60">AED 69 min</span>
+                            </div>
+                          )}
                           <div className="border-t border-white/[0.06] pt-2.5 flex items-center justify-between">
-                            <span className="text-white font-semibold">
-                              Total
-                            </span>
+                            <span className="text-white font-semibold">Total</span>
                             <span className="text-2xl font-bold gold-text">
                               AED {calculatedPrice}
                             </span>
@@ -645,19 +735,15 @@ export default function TranslatePage() {
                         {/* CTA */}
                         <button
                           onClick={handleCheckout}
-                          disabled={isCheckingOut}
+                          disabled={isCheckingOut || isUploading}
                           className="btn-primary w-full flex items-center justify-center gap-2.5 py-4 text-[15px] !rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isCheckingOut ? (
-                            <>
-                              <Loader2 className="w-5 h-5 animate-spin" />
-                              Processing...
-                            </>
+                          {isUploading ? (
+                            <><Loader2 className="w-5 h-5 animate-spin" />Uploading file…</>
+                          ) : isCheckingOut ? (
+                            <><Loader2 className="w-5 h-5 animate-spin" />Processing…</>
                           ) : (
-                            <>
-                              <Languages className="w-5 h-5" />
-                              Get Certified Translation — AED {calculatedPrice}
-                            </>
+                            <><Languages className="w-5 h-5" />Get Certified Translation — AED {calculatedPrice}</>
                           )}
                         </button>
                       </div>

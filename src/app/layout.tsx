@@ -20,6 +20,14 @@ export const metadata: Metadata = {
     siteName: "Sidqo",
     type: "website",
     locale: "en_AE",
+    images: [
+      {
+        url: "https://sidqo.com/og",
+        width: 1200,
+        height: 630,
+        alt: "Sidqo — AI Legal Guidance for UAE",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -90,6 +98,34 @@ export default function RootLayout({
                 target: "https://sidqo.com/chat?q={search_term_string}",
                 "query-input": "required name=search_term_string",
               },
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "LegalService",
+              name: "Sidqo — AI Legal Guidance",
+              description:
+                "AI-powered legal guidance platform providing instant consultation, document generation, and case strategy building for UAE residents.",
+              url: "https://sidqo.com",
+              areaServed: {
+                "@type": "Country",
+                name: "United Arab Emirates",
+              },
+              serviceType: [
+                "Legal Consultation",
+                "Legal Document Generation",
+                "Case Strategy Building",
+              ],
+              provider: {
+                "@type": "Organization",
+                name: "Sidqo",
+                url: "https://sidqo.com",
+              },
+              availableLanguage: ["en", "ar"],
             }),
           }}
         />

@@ -10,16 +10,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { pages, documentType, filename, storagePath } = await req.json();
+    const { wordCount, documentType, filename, storagePath } = await req.json();
 
-    if (!pages || pages < 1) {
+    if (!wordCount || wordCount < 1) {
       return NextResponse.json(
-        { error: "Invalid page count" },
+        { error: "Invalid word count" },
         { status: 400 }
       );
     }
 
-    const pricing = calculatePrice(pages);
+    const pricing = calculatePrice(wordCount);
     const customer = await getOrCreateCustomer(
       session.user.email,
       session.user.name || undefined
@@ -33,14 +33,16 @@ export async function POST(req: NextRequest) {
       documentType: documentType || "uploaded_doc",
       sourceLanguage: "en",
       targetLanguage: "ar",
-      totalPages: pages,
+      totalPages: 1, // kept for schema compatibility; word-count is the billing unit
+      totalWords: wordCount,
       status: "pending_payment",
       priceAed: pricing.totalAed,
       vendorPayoutAed: pricing.vendorCost,
       dispatchChannel: "email",
-      sourceStoragePath: storagePath,
+      sourceStoragePath: storagePath ?? null,
     });
 
+    const wordLabel = wordCount.toLocaleString();
     const origin = req.nextUrl.origin;
 
     const checkoutSession = await stripe.checkout.sessions.create({
@@ -51,11 +53,11 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: "aed",
             product_data: {
-              name: `Certified Legal Translation — ${pages} page${pages > 1 ? "s" : ""}`,
+              name: `Certified Legal Translation — ${wordLabel} words`,
               description:
-                `MOJ-certified English to Arabic translation. Delivered within 24 hours. ${filename ? `File: ${filename}` : ""}`.trim(),
+                `MOJ-certified English to Arabic translation. Delivered within 24 hours.${filename ? ` File: ${filename}` : ""}`.trim(),
             },
-            unit_amount: Math.round(pricing.totalAed * 100), // Stripe expects fils (cents)
+            unit_amount: Math.round(pricing.totalAed * 100), // fils (Stripe AED)
           },
           quantity: 1,
         },
@@ -66,12 +68,11 @@ export async function POST(req: NextRequest) {
         type: "translation",
         jobId: job.id,
         email: session.user.email,
-        pages: String(pages),
+        wordCount: String(wordCount),
         documentType: documentType || "uploaded_doc",
       },
     });
 
-    // Link checkout session to job
     await updateJob(job.id, { stripeCheckoutSessionId: checkoutSession.id });
 
     return NextResponse.json({ url: checkoutSession.url, jobId: job.id });

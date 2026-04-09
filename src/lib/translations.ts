@@ -43,6 +43,7 @@ export interface TranslationJob {
   sourceLanguage: string;
   targetLanguage: string;
   totalPages: number;
+  totalWords?: number;
   status: JobStatus;
   priceAed: number;
   vendorPayoutAed: number;
@@ -76,19 +77,26 @@ export interface Vendor {
 }
 
 // ─── Pricing ─────────────────────────────────────────────────
+// Vendor direct cost: AED 18 per 200 words = AED 0.09 / word
+// Customer price:    AED 0.15 / word (67% markup; covers Stripe 3.5%, ops, margin)
+// Minimum charge:    AED 69 (covers overhead for short documents)
 
-export const PRICE_PER_PAGE_AED = 45;
+export const PRICE_PER_WORD_AED = 0.15;
+export const VENDOR_COST_PER_WORD_AED = 0.09; // 18 AED per 200 words
 export const MINIMUM_CHARGE_AED = 69;
-export const VENDOR_COST_PER_PAGE_AED = 31.5;
+export const VENDOR_MINIMUM_AED = 50;
 
-export function calculatePrice(pages: number) {
-  const raw = pages * PRICE_PER_PAGE_AED;
+export function calculatePrice(wordCount: number) {
+  const raw = wordCount * PRICE_PER_WORD_AED;
   const totalAed = Math.max(raw, MINIMUM_CHARGE_AED);
+  const vendorCostRaw = wordCount * VENDOR_COST_PER_WORD_AED;
+  const vendorCost = Math.max(vendorCostRaw, VENDOR_MINIMUM_AED);
   return {
     totalAed,
-    perPage: PRICE_PER_PAGE_AED,
-    pages,
-    vendorCost: pages * VENDOR_COST_PER_PAGE_AED,
+    perWord: PRICE_PER_WORD_AED,
+    wordCount,
+    vendorCost,
+    margin: totalAed - vendorCost,
   };
 }
 
@@ -104,6 +112,7 @@ type JobRow = {
   source_language: string;
   target_language: string;
   total_pages: number;
+  total_words: number | null;
   status: string;
   price_aed: number;
   vendor_payout_aed: number;
@@ -158,6 +167,7 @@ function rowToJob(row: JobRow, docs: DocRow[] = []): TranslationJob {
     sourceLanguage: row.source_language,
     targetLanguage: row.target_language,
     totalPages: row.total_pages,
+    totalWords: row.total_words ?? undefined,
     status: row.status as JobStatus,
     priceAed: Number(row.price_aed),
     vendorPayoutAed: Number(row.vendor_payout_aed),
@@ -217,6 +227,7 @@ function jobUpdatesToRow(u: Partial<TranslationJob>): Record<string, unknown> {
   if (u.sourceLanguage !== undefined) r.source_language = u.sourceLanguage;
   if (u.targetLanguage !== undefined) r.target_language = u.targetLanguage;
   if (u.totalPages !== undefined) r.total_pages = u.totalPages;
+  if (u.totalWords !== undefined) r.total_words = u.totalWords;
   if (u.status !== undefined) r.status = u.status;
   if (u.priceAed !== undefined) r.price_aed = u.priceAed;
   if (u.vendorPayoutAed !== undefined) r.vendor_payout_aed = u.vendorPayoutAed;
