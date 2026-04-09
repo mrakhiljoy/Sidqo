@@ -611,6 +611,72 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ═══════ GRATUITY CALCULATOR ═══════ */}
+      <section className="py-24 sm:py-28 border-t border-white/[0.04]">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+          <Reveal>
+            <div className="rounded-[32px] border border-gold-400/10 bg-gradient-to-br from-gold-400/[0.08] via-white/[0.03] to-teal-500/[0.04] p-8 sm:p-10 lg:p-12 overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-gold-400/[0.06] blur-[90px]" />
+              <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-teal-500/[0.05] blur-[90px]" />
+
+              <div className="relative z-10 grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.06] border border-white/[0.1] mb-6">
+                    <Clock className="w-4 h-4 text-gold-400" />
+                    <span className="text-sm text-white/65 font-medium">
+                      Fastest-ranking asset
+                    </span>
+                  </div>
+
+                  <h2 className="font-display text-display-sm font-bold text-white mb-5 leading-[1.08]">
+                    Leaving a job in the UAE?
+                    <span className="gold-text"> Estimate your gratuity first.</span>
+                  </h2>
+
+                  <p className="text-lg text-white/45 leading-relaxed max-w-2xl mb-8">
+                    Our new UAE gratuity calculator helps employees estimate end-of-service
+                    pay using their basic salary, service dates and unpaid leave. It is the
+                    cleanest high-intent entry point for salary disputes, wrongful termination
+                    claims and MOHRE complaints.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link
+                      href="/uae-gratuity-calculator"
+                      className="btn-primary inline-flex items-center justify-center gap-3 text-[15px]"
+                    >
+                      Try the calculator
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    </Link>
+                    <Link
+                      href="/chat?q=gratuity"
+                      className="btn-secondary inline-flex items-center justify-center gap-3 text-[15px]"
+                    >
+                      Ask about my settlement
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+                  {[
+                    "Targets one of the clearest long-tail employment queries in the UAE.",
+                    "Brings in users who are already thinking about resignation, termination or final dues.",
+                    "Flows naturally into complaint drafting, document generation and legal guidance.",
+                  ].map((point) => (
+                    <div
+                      key={point}
+                      className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5"
+                    >
+                      <p className="text-sm text-white/55 leading-relaxed">{point}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ═══════ FAQ ═══════ */}
       <section className="py-24 sm:py-32 border-t border-white/[0.04]">
         <div className="max-w-3xl mx-auto px-6 lg:px-8">

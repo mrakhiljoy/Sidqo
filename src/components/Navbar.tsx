@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/documents/generate", label: "Documents" },
   { href: "/cases", label: "Case Strategy" },
   { href: "/rights", label: "Know Your Rights" },
+  { href: "/uae-gratuity-calculator", label: "Calculator" },
 ];
 
 export default function Navbar() {

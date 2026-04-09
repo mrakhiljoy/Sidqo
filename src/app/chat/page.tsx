@@ -130,6 +130,8 @@ function ChatContent() {
         tenant:        "What are my rights as a tenant in UAE? I want to understand my full legal protections regarding rent increases, eviction, and security deposits.",
         "golden-visa": "Am I eligible for the UAE Golden Visa? What are the different categories and requirements?",
         business:      "I want to start a business in UAE. What are my options — mainland vs free zone — and what steps do I need to follow?",
+        gratuity:      "Please review my UAE gratuity entitlement. I want to understand my end-of-service gratuity, final settlement, unpaid leave effect, and what I can do if my employer disagrees with the amount.",
+        "salary-delay":"My employer is delaying my salary or end-of-service dues in the UAE. What are my rights, how long should I wait, and how do I file a MOHRE complaint step by step?",
       };
       if (presets[q]) setInput(presets[q]);
     }
