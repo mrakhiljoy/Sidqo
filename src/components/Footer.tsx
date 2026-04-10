@@ -39,6 +39,7 @@ export default function Footer() {
                 { href: "/cases", label: "Case Strategy" },
                 { href: "/rights", label: "Know Your Rights" },
                 { href: "/uae-gratuity-calculator", label: "UAE Gratuity Calculator" },
+                { href: "/for-lawyers", label: "For Lawyers" },
               ].map(({ href, label }) => (
                 <li key={href}>
                   <Link

@@ -14,6 +14,7 @@ const navLinks = [
   { href: "/cases", label: "Case Strategy" },
   { href: "/rights", label: "Know Your Rights" },
   { href: "/uae-gratuity-calculator", label: "Calculator" },
+  { href: "/for-lawyers", label: "For Lawyers" },
 ];
 
 export default function Navbar() {
