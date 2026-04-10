@@ -30,7 +30,7 @@ export async function sendVendorAssignment(
 ) {
   if (warnIfMissing()) return;
   const slaHours = 72;
-  await resend!.emails.send({
+  const { data, error } = await resend!.emails.send({
     from: FROM,
     to: vendor.email,
     subject: `New translation job — ${job.totalPages} page${job.totalPages > 1 ? "s" : ""} — Job ${job.id.slice(0, 8)}`,
@@ -54,11 +54,13 @@ Thanks,
 Sidqo
 `,
   });
+  if (error) throw new Error(`Resend sendVendorAssignment failed: ${error.message}`);
+  console.log(`[email] vendor assignment sent to ${vendor.email}, id=${data?.id}`);
 }
 
 export async function sendCustomerReceipt(job: TranslationJob) {
   if (warnIfMissing()) return;
-  await resend!.emails.send({
+  const { data, error } = await resend!.emails.send({
     from: FROM,
     to: job.userEmail,
     subject: `Your translation order is confirmed — Job ${job.id.slice(0, 8)}`,
@@ -76,6 +78,8 @@ We'll email you the moment it's ready. You can also track progress at https://si
 — Sidqo
 `,
   });
+  if (error) throw new Error(`Resend sendCustomerReceipt failed: ${error.message}`);
+  console.log(`[email] customer receipt sent to ${job.userEmail}, id=${data?.id}`);
 }
 
 export async function sendCustomerDelivery(
@@ -83,7 +87,7 @@ export async function sendCustomerDelivery(
   signedDeliverableUrl: string | null
 ) {
   if (warnIfMissing()) return;
-  await resend!.emails.send({
+  const { data, error } = await resend!.emails.send({
     from: FROM,
     to: job.userEmail,
     subject: `Your certified translation is ready — Job ${job.id.slice(0, 8)}`,
@@ -100,15 +104,19 @@ https://sidqo.com/documents/my-translations
 — Sidqo
 `,
   });
+  if (error) throw new Error(`Resend sendCustomerDelivery failed: ${error.message}`);
+  console.log(`[email] customer delivery sent to ${job.userEmail}, id=${data?.id}`);
 }
 
 export async function sendAdminAlert(subject: string, body: string) {
   if (warnIfMissing()) return;
   if (ADMIN_EMAILS.length === 0) return;
-  await resend!.emails.send({
+  const { data, error } = await resend!.emails.send({
     from: FROM,
     to: ADMIN_EMAILS,
     subject: `[Sidqo Alert] ${subject}`,
     text: body,
   });
+  if (error) throw new Error(`Resend sendAdminAlert failed: ${error.message}`);
+  console.log(`[email] admin alert sent, id=${data?.id}`);
 }
