@@ -3,60 +3,83 @@ import { NextRequest, NextResponse } from "next/server";
 const WORDS_PER_PAGE_FALLBACK = 250;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PDF_MIME = "application/pdf";
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Try models in order of preference — 2.5 Flash (best, free 5 RPM),
+// then 1.5 Flash (widely available), then 2.0 Flash (may have 0 RPM).
+const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
+];
 
 /**
  * Gemini vision OCR — counts words and pages in PDFs and images.
- * Returns null if GEMINI_API_KEY is missing or the call fails.
+ * Tries multiple model names with fallback.
+ * Returns null if GEMINI_API_KEY is missing or all models fail.
  */
 async function geminiOcr(
   base64: string,
   mimeType: string
 ): Promise<{ wordCount: number; pageCount: number } | null> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { inline_data: { mime_type: mimeType, data: base64 } },
-                {
-                  text: `Count the total number of words in this document (include all visible text: headings, body, labels, captions, handwritten text, stamps, everything readable). Also count the total number of pages. Respond with EXACTLY two lines:\nWORDS: <integer>\nPAGES: <integer>`,
-                },
-              ],
-            },
-          ],
-          generationConfig: { maxOutputTokens: 64, temperature: 0 },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      console.error("Gemini OCR error:", res.status);
-      return null;
-    }
-
-    const data = await res.json();
-    const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!output) return null;
-
-    const wordMatch = output.match(/WORDS:\s*(\d+)/i);
-    const pageMatch = output.match(/PAGES:\s*(\d+)/i);
-    return {
-      wordCount: wordMatch ? parseInt(wordMatch[1], 10) : 0,
-      pageCount: pageMatch ? parseInt(pageMatch[1], 10) : 1,
-    };
-  } catch (err) {
-    console.error("Gemini OCR error:", err);
+  if (!key) {
+    console.error("GEMINI_API_KEY not set — cannot OCR");
     return null;
   }
+
+  const payload = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64 } },
+          {
+            text: `Count the total number of words in this document (include all visible text: headings, body, labels, captions, handwritten text, stamps, everything readable). Also count the total number of pages. Respond with EXACTLY two lines:\nWORDS: <integer>\nPAGES: <integer>`,
+          },
+        ],
+      },
+    ],
+    generationConfig: { maxOutputTokens: 64, temperature: 0 },
+  });
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`Gemini model ${model} failed: ${res.status} ${errText.slice(0, 200)}`);
+        continue; // try next model
+      }
+
+      const data = await res.json();
+      const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!output) {
+        console.error(`Gemini model ${model} returned empty output`);
+        continue;
+      }
+
+      const wordMatch = output.match(/WORDS:\s*(\d+)/i);
+      const pageMatch = output.match(/PAGES:\s*(\d+)/i);
+
+      console.log(`Gemini OCR success (model: ${model}): ${output}`);
+      return {
+        wordCount: wordMatch ? parseInt(wordMatch[1], 10) : 0,
+        pageCount: pageMatch ? parseInt(pageMatch[1], 10) : 1,
+      };
+    } catch (err) {
+      console.error(`Gemini model ${model} error:`, err);
+      continue;
+    }
+  }
+
+  console.error("All Gemini models failed for OCR");
+  return null;
 }
 
 // Public endpoint — no auth required
