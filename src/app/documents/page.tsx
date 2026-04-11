@@ -234,6 +234,7 @@ export default function TranslatePage() {
   const [pageCount, setPageCount] = useState(1);
   const [wordCount, setWordCount] = useState(0);
   const [wordCountEstimated, setWordCountEstimated] = useState(false);
+  const [wordCountConfirmed, setWordCountConfirmed] = useState(false);
   const [storagePath, setStoragePath] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -334,6 +335,7 @@ export default function TranslatePage() {
     setPageCount(1);
     setWordCount(0);
     setWordCountEstimated(false);
+    setWordCountConfirmed(false);
     setStoragePath(null);
     setIsAnalyzing(false);
     setError("");
@@ -618,7 +620,7 @@ export default function TranslatePage() {
                           </label>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setWordCount((c) => Math.max(50, (c || pageCount * 250) - 50))}
+                              onClick={() => { setWordCount((c) => Math.max(50, (c || pageCount * 250) - 50)); setWordCountConfirmed(false); }}
                               className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.08] text-lg font-medium transition-all cursor-pointer"
                               aria-label="Decrease word count"
                             >-</button>
@@ -626,11 +628,11 @@ export default function TranslatePage() {
                               type="number"
                               min={1}
                               value={effectiveWordCount}
-                              onChange={(e) => setWordCount(Math.max(1, parseInt(e.target.value) || 1))}
+                              onChange={(e) => { setWordCount(Math.max(1, parseInt(e.target.value) || 1)); setWordCountConfirmed(false); }}
                               className="w-24 text-center rounded-xl px-3 py-2.5 bg-white/[0.04] border border-white/[0.08] text-white font-medium focus:outline-none focus:border-gold-400/50 transition-all"
                             />
                             <button
-                              onClick={() => setWordCount((c) => (c || pageCount * 250) + 50)}
+                              onClick={() => { setWordCount((c) => (c || pageCount * 250) + 50); setWordCountConfirmed(false); }}
                               className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.08] text-lg font-medium transition-all cursor-pointer"
                               aria-label="Increase word count"
                             >+</button>
@@ -691,16 +693,44 @@ export default function TranslatePage() {
                           </div>
                         </div>
 
+                        {/* Estimated word count warning */}
+                        {!isAnalyzing && wordCountEstimated && !wordCountConfirmed && (
+                          <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-amber-300/90 leading-relaxed">
+                              <span className="font-medium">Word count could not be auto-detected.</span>{" "}
+                              Please review the word count above and adjust it to match your document before proceeding. An inaccurate count may result in your translation being rejected.
+                            </div>
+                          </div>
+                        )}
+                        {!isAnalyzing && wordCountEstimated && wordCountConfirmed && (
+                          <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/20">
+                            <Check className="w-4 h-4 text-teal-400 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-teal-300/90 leading-relaxed">
+                              Word count confirmed at <span className="font-medium">{effectiveWordCount.toLocaleString()} words</span>. Click the button below to proceed to payment.
+                            </div>
+                          </div>
+                        )}
+
                         {/* CTA */}
                         <button
-                          onClick={handleCheckout}
-                          disabled={isCheckingOut || isUploading}
+                          onClick={() => {
+                            if (wordCountEstimated && !wordCountConfirmed) {
+                              // First click: confirm the word count
+                              setWordCountConfirmed(true);
+                              return;
+                            }
+                            handleCheckout();
+                          }}
+                          disabled={isCheckingOut || isUploading || isAnalyzing}
                           className="btn-primary w-full flex items-center justify-center gap-2.5 py-4 text-[15px] !rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isUploading ? (
                             <><Loader2 className="w-5 h-5 animate-spin" />Uploading file…</>
                           ) : isCheckingOut ? (
                             <><Loader2 className="w-5 h-5 animate-spin" />Processing…</>
+                          ) : wordCountEstimated && !wordCountConfirmed ? (
+                            <><AlertCircle className="w-5 h-5" />Confirm Word Count & Pay — AED {calculatedPrice}</>
                           ) : (
                             <><Languages className="w-5 h-5" />Get Certified Translation — AED {calculatedPrice}</>
                           )}

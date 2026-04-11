@@ -118,10 +118,13 @@ export async function POST(req: NextRequest) {
 
     // Fallback: Gemini unavailable or returned 0
     const pageCount = result?.pageCount || 1;
+    const hasKey = !!process.env.GEMINI_API_KEY;
+    console.error(`OCR fallback used — hasKey: ${hasKey}, result:`, result);
     return NextResponse.json({
       pageCount,
       wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
       estimated: true,
+      debug: { hasKey, resultWas: result ? "empty" : "null" },
     });
   } catch (error) {
     console.error("File analysis error:", error);
