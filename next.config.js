@@ -10,6 +10,6 @@ const nextConfig = {
   },
   // pdf-parse v2 and mammoth are ESM packages — tell Next.js not to bundle them
   // so Node.js can import them directly at runtime
-  serverExternalPackages: ["pdf-parse", "mammoth", "tesseract.js"],
+  serverExternalPackages: ["pdf-parse", "mammoth"],
 };
 module.exports = nextConfig;
