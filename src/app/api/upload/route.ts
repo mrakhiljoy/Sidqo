@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { GEMINI_API_KEY } from "@/lib/env";
 import { auth } from "@/lib/auth";
@@ -17,45 +16,66 @@ const ALLOWED_TYPES: Record<string, string> = {
 };
 const IMAGE_TYPES = new Set(["jpg", "png", "webp", "gif"]);
 
-async function translateWithGemini(text: string): Promise<{ translated: string; detectedLanguage: string } | null> {
-  if (!GEMINI_API_KEY) return null;
+/**
+ * Use Gemini to extract all text from a PDF or image.
+ * Returns plain text content, or null if extraction fails.
+ */
+async function geminiExtractText(
+  base64: string,
+  mimeType: string,
+  purpose: "extract" | "translate" = "extract"
+): Promise<{ text: string; detectedLanguage?: string; wasTranslated?: boolean } | null> {
+  const key = GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!key) return null;
+
+  const prompt =
+    purpose === "translate"
+      ? `You are a document translator. Extract all text from this document and translate it to English. Preserve the original structure, clause numbering, and formatting. First line must be "DETECTED_LANGUAGE: [language name]", then provide the full English translation.`
+      : `Extract all text from this document exactly as written. Preserve all structure, numbering, headings, and formatting. Return only the extracted text, nothing else.`;
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `You are a document translator. Translate the following document text to English. Preserve the original structure, clause numbering, and formatting as much as possible. First, on a single line, state the detected language in the format "DETECTED_LANGUAGE: [language name]", then provide the full translation.\n\n${text.slice(0, 30000)}`
-            }]
-          }],
-          generationConfig: { maxOutputTokens: 8192 },
+          contents: [
+            {
+              parts: [
+                { inline_data: { mime_type: mimeType, data: base64 } },
+                { text: prompt },
+              ],
+            },
+          ],
+          generationConfig: { maxOutputTokens: 8192, temperature: 0 },
         }),
       }
     );
 
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!output) return null;
-
-    // Extract detected language from first line
-    const lines = output.split("\n");
-    let detectedLanguage = "Unknown";
-    let translated = output;
-
-    if (lines[0]?.startsWith("DETECTED_LANGUAGE:")) {
-      detectedLanguage = lines[0].replace("DETECTED_LANGUAGE:", "").trim();
-      translated = lines.slice(1).join("\n").trim();
+    if (!res.ok) {
+      console.error("Gemini text extraction failed:", res.status, await res.text().catch(() => ""));
+      return null;
     }
 
-    return { translated, detectedLanguage };
-  } catch (error) {
-    console.error("Gemini translation error:", error);
+    const data = await res.json();
+    const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!output) return null;
+
+    if (purpose === "translate") {
+      const lines = output.split("\n");
+      let detectedLanguage = "Unknown";
+      let text = output;
+      if (lines[0]?.startsWith("DETECTED_LANGUAGE:")) {
+        detectedLanguage = lines[0].replace("DETECTED_LANGUAGE:", "").trim();
+        text = lines.slice(1).join("\n").trim();
+      }
+      return { text, detectedLanguage, wasTranslated: true };
+    }
+
+    return { text: output };
+  } catch (err) {
+    console.error("Gemini extraction error:", err);
     return null;
   }
 }
@@ -87,8 +107,7 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Persist source file to Supabase Storage (for later vendor dispatch).
-    // Non-fatal: if storage is misconfigured we still return extracted text.
+    // Persist source file to Supabase Storage — non-fatal
     let storagePath: string | null = null;
     try {
       const session = await auth();
@@ -98,7 +117,7 @@ export async function POST(req: Request) {
       console.error("Source file storage failed (non-fatal):", e);
     }
 
-    // Handle image uploads — return base64 for Claude vision
+    // ── Images: return base64 for Claude vision in chat ──
     if (IMAGE_TYPES.has(fileType)) {
       const imageData = buffer.toString("base64");
       return NextResponse.json({
@@ -108,20 +127,29 @@ export async function POST(req: Request) {
         extractedText: `[Image attached: ${file.name}]`,
         imageData,
         imageMediaType: file.type,
+        storagePath,
       });
     }
 
     let extractedText = "";
-    let pageCount: number | undefined;
 
+    // ── PDFs: use Gemini vision extraction (no native deps) ──
     if (fileType === "pdf") {
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
-      const info = await parser.getInfo();
-      const textResult = await parser.getText();
-      extractedText = textResult.text;
-      pageCount = info?.total;
-      await parser.destroy();
-    } else if (fileType === "docx") {
+      const base64 = buffer.toString("base64");
+      const result = await geminiExtractText(base64, "application/pdf");
+      if (result?.text) {
+        extractedText = result.text;
+      } else {
+        // Gemini unavailable — tell user clearly
+        return NextResponse.json(
+          { error: "Could not extract text from this PDF. Please try again in a moment." },
+          { status: 422 }
+        );
+      }
+    }
+
+    // ── DOCX: use mammoth ──
+    if (fileType === "docx") {
       const result = await mammoth.extractRawText({ buffer });
       extractedText = result.value;
     }
@@ -131,15 +159,12 @@ export async function POST(req: Request) {
 
     if (!extractedText) {
       return NextResponse.json(
-        {
-          error:
-            "Could not extract text from this document. It may be a scanned image — text-based PDFs and DOCX files work best.",
-        },
+        { error: "Could not extract text from this document. It may be a scanned image — please upload as JPG or PNG instead." },
         { status: 422 }
       );
     }
 
-    // Detect if document might need translation (simple heuristic)
+    // Detect if document might need translation
     const latinCharCount = (extractedText.match(/[a-zA-Z]/g) || []).length;
     const totalCharCount = extractedText.replace(/\s/g, "").length;
     const latinRatio = totalCharCount > 0 ? latinCharCount / totalCharCount : 0;
@@ -149,9 +174,10 @@ export async function POST(req: Request) {
     let detectedLanguage: string | undefined;
 
     if (needsTranslation) {
-      const translation = await translateWithGemini(extractedText);
-      if (translation) {
-        translatedText = translation.translated;
+      const base64 = buffer.toString("base64");
+      const translation = await geminiExtractText(base64, file.type, "translate");
+      if (translation?.text) {
+        translatedText = translation.text;
         detectedLanguage = translation.detectedLanguage;
       }
     }
@@ -159,7 +185,6 @@ export async function POST(req: Request) {
     return NextResponse.json({
       fileName: file.name,
       fileType,
-      pageCount,
       textLength: extractedText.length,
       extractedText: translatedText || extractedText,
       originalText: translatedText ? extractedText : undefined,
