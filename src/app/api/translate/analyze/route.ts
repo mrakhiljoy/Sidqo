@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Allow up to 60s for OCR (Vercel Pro). Hobby plan caps at 10s.
+export const maxDuration = 60;
+
 const WORDS_PER_PAGE_FALLBACK = 250;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PDF_MIME = "application/pdf";
 
 // gemini-2.5-flash (5 RPM free), gemini-2.0-flash (fallback)
 const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
-const MAX_RETRIES = 1;
-const RETRY_DELAY_MS = 5_000; // 5s — brief retry for transient rate limits
+// For PDFs: retry once (no Tesseract fallback available)
+// For images: no retry (Tesseract fallback is faster)
+const RETRY_DELAY_MS = 5_000;
 
 // Collect errors from the last OCR attempt for debugging
 let lastOcrErrors: string[] = [];
@@ -56,7 +60,8 @@ async function tesseractOcr(
  * ──────────────────────────────────────────────────────── */
 async function geminiOcr(
   base64: string,
-  mimeType: string
+  mimeType: string,
+  maxRetries = 1
 ): Promise<{ wordCount: number; pageCount: number } | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -79,7 +84,7 @@ async function geminiOcr(
   });
 
   for (const model of GEMINI_MODELS) {
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
@@ -91,10 +96,10 @@ async function geminiOcr(
         );
 
         if (res.status === 429) {
-          const msg = `${model}: 429 rate-limited (attempt ${attempt + 1}/${MAX_RETRIES + 1})`;
+          const msg = `${model}: 429 rate-limited (attempt ${attempt + 1}/${maxRetries + 1})`;
           lastOcrErrors.push(msg);
           console.error(msg);
-          if (attempt < MAX_RETRIES) {
+          if (attempt < maxRetries) {
             await sleep(RETRY_DELAY_MS);
             continue;
           }
@@ -168,7 +173,10 @@ export async function POST(req: NextRequest) {
     lastOcrErrors = [];
 
     // ── 1. Try Gemini vision (handles PDFs + images) ──
-    const geminiResult = await geminiOcr(base64, file.type);
+    // For images: no retry (Tesseract fallback is faster than waiting)
+    // For PDFs: retry once (no local fallback available)
+    const isImage = IMAGE_MIME_TYPES.has(file.type);
+    const geminiResult = await geminiOcr(base64, file.type, isImage ? 0 : 1);
     if (geminiResult && geminiResult.wordCount > 0) {
       return NextResponse.json({
         pageCount: geminiResult.pageCount,
@@ -179,7 +187,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 2. Fallback: Tesseract.js for images only ──
-    if (IMAGE_MIME_TYPES.has(file.type)) {
+    if (isImage) {
       const tessResult = await tesseractOcr(buffer);
       if (tessResult && tessResult.wordCount > 0) {
         return NextResponse.json({
