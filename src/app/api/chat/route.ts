@@ -13,7 +13,13 @@ export async function POST(req: Request) {
 
   try {
     const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-    const { messages } = await req.json();
+    const { messages } = await req.json() as {
+      messages: Array<{
+        role: string;
+        content: string;
+        document?: { imageData?: string; imageMediaType?: string };
+      }>;
+    };
 
     if (!messages || !Array.isArray(messages)) {
       return new Response("Invalid messages format", { status: 400 });
@@ -30,10 +36,28 @@ export async function POST(req: Request) {
             system: UAE_LAWYER_SYSTEM_PROMPT,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             thinking: { type: "adaptive" } as any,
-            messages: messages.map((m: { role: string; content: string }) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            })),
+            messages: messages.map((m) => {
+              if (m.document?.imageData && m.document?.imageMediaType) {
+                return {
+                  role: m.role as "user" | "assistant",
+                  content: [
+                    {
+                      type: "image" as const,
+                      source: {
+                        type: "base64" as const,
+                        media_type: m.document.imageMediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+                        data: m.document.imageData,
+                      },
+                    },
+                    { type: "text" as const, text: m.content },
+                  ],
+                };
+              }
+              return {
+                role: m.role as "user" | "assistant",
+                content: m.content,
+              };
+            }),
           });
 
           for await (const event of anthropicStream) {

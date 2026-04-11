@@ -233,6 +233,7 @@ export default function TranslatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const [wordCount, setWordCount] = useState(0);
+  const [wordCountEstimated, setWordCountEstimated] = useState(false);
   const [storagePath, setStoragePath] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -242,11 +243,13 @@ export default function TranslatePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const calculatedPrice = calcPrice(wordCount || pageCount * 250);
+  const effectiveWordCount = wordCount || pageCount * 250;
+  const calculatedPrice = calcPrice(effectiveWordCount);
 
   const analyzeFile = async (f: File) => {
     setIsAnalyzing(true);
     setStoragePath(null);
+    setWordCountEstimated(false);
     try {
       const formData = new FormData();
       formData.append("file", f);
@@ -257,11 +260,19 @@ export default function TranslatePage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setPageCount(data.pageCount || 1);
-        setWordCount(data.wordCount || 0);
+        const pages = data.pageCount || 1;
+        setPageCount(pages);
+        setWordCount(data.wordCount || pages * 250);
+        setWordCountEstimated(data.estimated ?? (data.wordCount === 0));
+      } else {
+        // API error — use a reasonable estimate
+        setWordCount(pageCount * 250);
+        setWordCountEstimated(true);
       }
     } catch {
-      // Fall back: estimate 250 words per page
+      // Network error — fall back to estimate
+      setWordCount(pageCount * 250);
+      setWordCountEstimated(true);
     } finally {
       setIsAnalyzing(false);
     }
@@ -322,6 +333,7 @@ export default function TranslatePage() {
     setFile(null);
     setPageCount(1);
     setWordCount(0);
+    setWordCountEstimated(false);
     setStoragePath(null);
     setIsAnalyzing(false);
     setError("");
@@ -335,7 +347,7 @@ export default function TranslatePage() {
   };
 
   const handleCheckout = async () => {
-    const effectiveWordCount = wordCount || pageCount * 250;
+    const checkoutWordCount = effectiveWordCount;
     const filename = file?.name || "";
 
     setIsCheckingOut(true);
@@ -352,7 +364,7 @@ export default function TranslatePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          wordCount: effectiveWordCount,
+          wordCount: checkoutWordCount,
           documentType: "uploaded_doc",
           filename,
           storagePath: path,
@@ -361,7 +373,7 @@ export default function TranslatePage() {
       const data = await res.json();
       if (data.url) {
         trackEvent("translate_checkout_started", {
-          wordCount: effectiveWordCount,
+          wordCount: checkoutWordCount,
           price: calculatedPrice,
         });
         window.location.href = data.url;
@@ -578,9 +590,9 @@ export default function TranslatePage() {
                                   Analyzing...
                                 </span>
                               )}
-                              {!isAnalyzing && wordCount > 0 && (
+                              {!isAnalyzing && effectiveWordCount > 0 && (
                                 <span className="ml-2">
-                                  {wordCount.toLocaleString()} words
+                                  {wordCountEstimated ? "~" : ""}{effectiveWordCount.toLocaleString()} words
                                 </span>
                               )}
                             </p>
@@ -599,19 +611,21 @@ export default function TranslatePage() {
                           <label className="text-sm text-white/50 mb-2.5 block">
                             Word Count
                             {!isAnalyzing && wordCount > 0 && (
-                              <span className="text-gold-400/60 ml-1.5 text-xs">(auto-detected)</span>
+                              <span className="text-gold-400/60 ml-1.5 text-xs">
+                                {wordCountEstimated ? "(estimated — adjust if needed)" : "(auto-detected)"}
+                              </span>
                             )}
                           </label>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setWordCount((c) => Math.max(50, c - 50))}
+                              onClick={() => setWordCount((c) => Math.max(50, (c || pageCount * 250) - 50))}
                               className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.08] text-lg font-medium transition-all cursor-pointer"
                               aria-label="Decrease word count"
                             >-</button>
                             <input
                               type="number"
                               min={1}
-                              value={wordCount || pageCount * 250}
+                              value={effectiveWordCount}
                               onChange={(e) => setWordCount(Math.max(1, parseInt(e.target.value) || 1))}
                               className="w-24 text-center rounded-xl px-3 py-2.5 bg-white/[0.04] border border-white/[0.08] text-white font-medium focus:outline-none focus:border-gold-400/50 transition-all"
                             />
@@ -633,26 +647,15 @@ export default function TranslatePage() {
                               Arabic
                             </span>
                           </div>
-                          {wordCount > 0 ? (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-white/40">
-                                {wordCount.toLocaleString()} words × AED {PRICE_PER_WORD}
-                              </span>
-                              <span className="text-white/80">
-                                AED {(wordCount * PRICE_PER_WORD).toFixed(2)}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-white/40">
-                                {pageCount} {pageCount === 1 ? "page" : "pages"} (~{(pageCount * 250).toLocaleString()} words)
-                              </span>
-                              <span className="text-white/80">
-                                AED {(pageCount * 250 * PRICE_PER_WORD).toFixed(2)}
-                              </span>
-                            </div>
-                          )}
-                          {(wordCount || pageCount * 250) * PRICE_PER_WORD < MINIMUM_CHARGE && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-white/40">
+                              {effectiveWordCount.toLocaleString()} words{wordCountEstimated ? " (est.)" : ""} × AED {PRICE_PER_WORD}
+                            </span>
+                            <span className="text-white/80">
+                              AED {(effectiveWordCount * PRICE_PER_WORD).toFixed(2)}
+                            </span>
+                          </div>
+                          {effectiveWordCount * PRICE_PER_WORD < MINIMUM_CHARGE && (
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-white/40">Minimum charge applied</span>
                               <span className="text-xs text-gold-400/60">AED 69 min</span>

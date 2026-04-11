@@ -308,34 +308,58 @@ body {
 /* ── Prose Legal (for chat/doc pages) ──────────────── */
 .prose-legal h1,
 .prose-legal h2,
-.prose-legal h3 {
-  color: var(--gold);
-  margin-top: 1.2em;
+.prose-legal h3,
+.prose-legal h4 {
+  color: var(--text-primary);
+  margin-top: 1.4em;
   margin-bottom: 0.5em;
   font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   font-family: "Plus Jakarta Sans", system-ui, sans-serif;
 }
 
+.prose-legal h3:first-child,
+.prose-legal h4:first-child {
+  margin-top: 0;
+}
+
 .prose-legal p {
-  margin-bottom: 0.8em;
-  line-height: 1.75;
+  margin-bottom: 1em;
+  line-height: 1.8;
   color: var(--text-secondary);
+}
+
+.prose-legal p:last-child {
+  margin-bottom: 0;
 }
 
 .prose-legal ul,
 .prose-legal ol {
   margin-left: 1.5em;
-  margin-bottom: 0.8em;
+  margin-bottom: 1em;
 }
 
 .prose-legal li {
-  margin-bottom: 0.3em;
+  margin-bottom: 0.5em;
+  line-height: 1.7;
   color: var(--text-secondary);
+}
+
+.prose-legal li:last-child {
+  margin-bottom: 0;
 }
 
 .prose-legal strong {
   color: var(--gold-light);
   font-weight: 600;
+}
+
+.prose-legal hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  margin: 1.25em 0;
 }
 
 .prose-legal code {

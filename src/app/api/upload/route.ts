@@ -6,10 +6,16 @@ import { auth } from "@/lib/auth";
 import { uploadSourceFile } from "@/lib/storage";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB for images
 const ALLOWED_TYPES: Record<string, string> = {
   "application/pdf": "pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
 };
+const IMAGE_TYPES = new Set(["jpg", "png", "webp", "gif"]);
 
 async function translateWithGemini(text: string): Promise<{ translated: string; detectedLanguage: string } | null> {
   if (!GEMINI_API_KEY) return null;
@@ -63,17 +69,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    const fileType = ALLOWED_TYPES[file.type];
+    if (!fileType) {
       return NextResponse.json(
-        { error: "File size exceeds 25MB limit" },
+        { error: "Unsupported file type. Please upload a PDF, DOCX, or image file (JPG, PNG, WebP)." },
         { status: 400 }
       );
     }
 
-    const fileType = ALLOWED_TYPES[file.type];
-    if (!fileType) {
+    const sizeLimit = IMAGE_TYPES.has(fileType) ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
+    if (file.size > sizeLimit) {
       return NextResponse.json(
-        { error: "Unsupported file type. Please upload a PDF or DOCX file." },
+        { error: IMAGE_TYPES.has(fileType) ? "Image size exceeds 10MB limit." : "File size exceeds 25MB limit." },
         { status: 400 }
       );
     }
@@ -89,6 +96,19 @@ export async function POST(req: Request) {
       storagePath = await uploadSourceFile(email, file.name, buffer, file.type);
     } catch (e) {
       console.error("Source file storage failed (non-fatal):", e);
+    }
+
+    // Handle image uploads — return base64 for Claude vision
+    if (IMAGE_TYPES.has(fileType)) {
+      const imageData = buffer.toString("base64");
+      return NextResponse.json({
+        fileName: file.name,
+        fileType,
+        textLength: 0,
+        extractedText: `[Image attached: ${file.name}]`,
+        imageData,
+        imageMediaType: file.type,
+      });
     }
 
     let extractedText = "";

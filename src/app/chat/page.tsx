@@ -54,6 +54,8 @@ interface DocumentAttachment {
   needsTranslation?: boolean;
   wasTranslated?: boolean;
   detectedLanguage?: string;
+  imageData?: string;
+  imageMediaType?: string;
 }
 
 interface Message {
@@ -227,13 +229,22 @@ function ChatContent() {
     }
   }, [session?.user?.subscriptionStatus]);
 
+  // Strip large imageData before persisting to localStorage
+  const stripImageData = (msgs: Message[]) =>
+    msgs.map((m) =>
+      m.document?.imageData
+        ? { ...m, document: { ...m.document, imageData: undefined, imageMediaType: undefined } }
+        : m
+    );
+
   useEffect(() => {
     if (messages.length === 0) return;
+    const serializable = stripImageData(messages);
     if (session?.user?.email) {
-      localStorage.setItem(chatHistoryKey(session.user.email), JSON.stringify(messages));
+      localStorage.setItem(chatHistoryKey(session.user.email), JSON.stringify(serializable));
       localStorage.removeItem(CHAT_HISTORY_ANON_KEY);
     } else {
-      localStorage.setItem(CHAT_HISTORY_ANON_KEY, JSON.stringify(messages));
+      localStorage.setItem(CHAT_HISTORY_ANON_KEY, JSON.stringify(serializable));
     }
   }, [messages]);
 
@@ -247,7 +258,7 @@ function ChatContent() {
 
     if (!session) {
       pendingMessageRef.current = text;
-      if (messages.length > 0) localStorage.setItem(CHAT_HISTORY_ANON_KEY, JSON.stringify(messages));
+      if (messages.length > 0) localStorage.setItem(CHAT_HISTORY_ANON_KEY, JSON.stringify(stripImageData(messages)));
       localStorage.setItem(PENDING_MSG_KEY, text);
       localStorage.setItem(PENDING_REASON_KEY, "login");
       setInput("");
@@ -261,7 +272,7 @@ function ChatContent() {
       session.user?.email &&
       hasReachedLimit("msg", session.user.email, FREE_MESSAGE_LIMIT)
     ) {
-      if (messages.length > 0) localStorage.setItem(chatHistoryKey(session.user.email!), JSON.stringify(messages));
+      if (messages.length > 0) localStorage.setItem(chatHistoryKey(session.user.email!), JSON.stringify(stripImageData(messages)));
       localStorage.setItem(PENDING_MSG_KEY, text);
       localStorage.setItem(PENDING_REASON_KEY, "upgrade");
       setShowUpgradeModal(true);
@@ -298,7 +309,13 @@ function ChatContent() {
     const assistantMessage: Message = { role: "assistant", content: "" };
     setMessages([...newMessages, assistantMessage]);
 
-    const apiMessages = newMessages.map((m) => ({ role: m.role, content: m.content }));
+    const apiMessages = newMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      ...(m.document?.imageData
+        ? { document: { imageData: m.document.imageData, imageMediaType: m.document.imageMediaType } }
+        : {}),
+    }));
 
     try {
       const res = await fetch("/api/chat", {
@@ -402,9 +419,15 @@ function ChatContent() {
 
   const handleFileUpload = async (file: File) => {
     setUploadError(null);
-    const allowedTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-    if (!allowedTypes.includes(file.type)) { setUploadError("Please upload a PDF or Word (.docx) file."); return; }
-    if (file.size > 25 * 1024 * 1024)     { setUploadError("File size exceeds 25MB limit."); return; }
+    const allowedTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg", "image/png", "image/webp", "image/gif",
+    ];
+    const isImage = file.type.startsWith("image/");
+    if (!allowedTypes.includes(file.type)) { setUploadError("Please upload a PDF, Word (.docx), or image file (JPG, PNG, WebP)."); return; }
+    if (isImage && file.size > 10 * 1024 * 1024) { setUploadError("Image size exceeds 10MB limit."); return; }
+    if (!isImage && file.size > 25 * 1024 * 1024) { setUploadError("File size exceeds 25MB limit."); return; }
 
     setIsUploading(true);
     try {
@@ -433,6 +456,8 @@ function ChatContent() {
         needsTranslation: data.needsTranslation as boolean | undefined,
         wasTranslated: data.wasTranslated as boolean | undefined,
         detectedLanguage: data.detectedLanguage as string | undefined,
+        imageData: data.imageData as string | undefined,
+        imageMediaType: data.imageMediaType as string | undefined,
       });
     } catch {
       setUploadError("Failed to upload document. Please try again.");
@@ -655,12 +680,22 @@ function ChatContent() {
                         /* User bubble */
                         <div className="bg-[var(--gold)]/12 border border-[var(--gold)]/20 rounded-2xl rounded-tr-sm px-4 py-3">
                           {msg.document && (
-                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[var(--gold)]/12">
-                              <FileText className="w-4 h-4 text-[var(--gold)]" />
-                              <span className="text-xs text-[var(--gold)] font-medium">{msg.document.fileName}</span>
-                              {msg.document.pageCount && (
-                                <span className="text-xs text-[var(--text-muted)]">{msg.document.pageCount} pages</span>
+                            <div className="mb-2 pb-2 border-b border-[var(--gold)]/12">
+                              {msg.document.imageData && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={`data:${msg.document.imageMediaType};base64,${msg.document.imageData}`}
+                                  alt={msg.document.fileName}
+                                  className="max-w-[220px] max-h-[140px] rounded-lg object-cover mb-2"
+                                />
                               )}
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-[var(--gold)]" />
+                                <span className="text-xs text-[var(--gold)] font-medium">{msg.document.fileName}</span>
+                                {msg.document.pageCount && (
+                                  <span className="text-xs text-[var(--text-muted)]">{msg.document.pageCount} pages</span>
+                                )}
+                              </div>
                             </div>
                           )}
                           <p className="text-sm text-[var(--text-primary)]/90 leading-relaxed whitespace-pre-wrap">
@@ -671,14 +706,30 @@ function ChatContent() {
                         </div>
                       ) : (
                         /* Assistant bubble */
-                        <div className="bg-[var(--surface-1)] border border-white/[0.06] rounded-2xl rounded-tl-sm px-5 py-4">
+                        <div className="bg-[var(--surface-1)] border border-white/[0.06] rounded-2xl rounded-tl-sm px-5 py-5">
                           {msg.content ? (
-                            <div className="prose-legal text-sm">
-                              <ReactMarkdown>{msg.content}</ReactMarkdown>
-                              {isStreaming && idx === messages.length - 1 && (
-                                <span className="inline-block w-0.5 h-4 bg-[var(--gold)] ml-0.5 animate-pulse align-middle" />
+                            <>
+                              <div className="prose-legal text-sm">
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                {isStreaming && idx === messages.length - 1 && (
+                                  <span className="inline-block w-0.5 h-4 bg-[var(--gold)] ml-0.5 animate-pulse align-middle" />
+                                )}
+                              </div>
+                              {/* Upload CTA — shown when AI suggests uploading a document */}
+                              {!isStreaming && idx === messages.length - 1 && !pendingDocument &&
+                                /upload (them|it|document|pdf|word|contract|letter|agreement|screenshots?|here)/i.test(msg.content) && (
+                                <motion.button
+                                  initial={{ opacity: 0, y: 6 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.25, delay: 0.1, ease: EASE_OUT }}
+                                  onClick={handlePaperclipClick}
+                                  className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/25 text-[var(--gold)] text-xs font-medium hover:bg-[var(--gold)]/18 hover:border-[var(--gold)]/40 transition-[background-color,border-color] duration-150 active:scale-[0.97]"
+                                >
+                                  <Paperclip className="w-3.5 h-3.5" />
+                                  Attach Document
+                                </motion.button>
                               )}
-                            </div>
+                            </>
                           ) : (
                             <div className="flex items-center gap-2 text-[var(--gold)]/50">
                               <Sparkles className="w-4 h-4 animate-pulse" />
@@ -786,7 +837,16 @@ function ChatContent() {
                   transition={{ duration: 0.2, ease: EASE_OUT }}
                   className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-xl bg-[var(--gold)]/8 border border-[var(--gold)]/20"
                 >
-                  <FileText className="w-4 h-4 text-[var(--gold)] flex-shrink-0" />
+                  {pendingDocument.imageData ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`data:${pendingDocument.imageMediaType};base64,${pendingDocument.imageData}`}
+                      alt={pendingDocument.fileName}
+                      className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <FileText className="w-4 h-4 text-[var(--gold)] flex-shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-[var(--gold)] font-medium truncate block">{pendingDocument.fileName}</span>
                     {pendingDocument.wasTranslated && (
@@ -850,7 +910,7 @@ function ChatContent() {
               <button
                 onClick={handlePaperclipClick}
                 disabled={isStreaming || isUploading}
-                title="Upload document (PDF, DOCX)"
+                title="Upload document or image (PDF, DOCX, JPG, PNG)"
                 className="w-11 h-11 rounded-xl border border-white/[0.08] text-[var(--text-muted)] hover:text-[var(--gold)] hover:border-[var(--gold)]/30 flex items-center justify-center flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-[border-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.93]"
               >
                 <Paperclip className="w-4 h-4" />
@@ -858,7 +918,7 @@ function ChatContent() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                accept=".pdf,.docx,.jpg,.jpeg,.png,.webp,.gif"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ""; }}
                 className="hidden"
               />

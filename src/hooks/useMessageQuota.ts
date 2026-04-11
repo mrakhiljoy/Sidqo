@@ -1,4 +1,4 @@
-export const FREE_MESSAGE_LIMIT = 3;
+export const FREE_MESSAGE_LIMIT = 2;
 export const FREE_DOC_LIMIT = 1;
 export const FREE_CASE_LIMIT = 1;
 
