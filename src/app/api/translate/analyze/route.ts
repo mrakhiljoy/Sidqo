@@ -6,8 +6,8 @@ const PDF_MIME = "application/pdf";
 
 // gemini-2.5-flash (5 RPM free), gemini-2.0-flash (fallback)
 const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 15_000; // 15s — enough to reset the per-minute quota
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 5_000; // 5s — brief retry for transient rate limits
 
 // Collect errors from the last OCR attempt for debugging
 let lastOcrErrors: string[] = [];
