@@ -16,12 +16,17 @@ const GEMINI_MODELS = [
  * Tries multiple model names with fallback.
  * Returns null if GEMINI_API_KEY is missing or all models fail.
  */
+// Collect errors from the last OCR attempt for debugging
+let lastOcrErrors: string[] = [];
+
 async function geminiOcr(
   base64: string,
   mimeType: string
 ): Promise<{ wordCount: number; pageCount: number } | null> {
   const key = process.env.GEMINI_API_KEY;
+  lastOcrErrors = [];
   if (!key) {
+    lastOcrErrors.push("GEMINI_API_KEY not set");
     console.error("GEMINI_API_KEY not set — cannot OCR");
     return null;
   }
@@ -53,6 +58,8 @@ async function geminiOcr(
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
+        const msg = `${model}: HTTP ${res.status} — ${errText.slice(0, 200)}`;
+        lastOcrErrors.push(msg);
         console.error(`Gemini model ${model} failed: ${res.status} ${errText.slice(0, 200)}`);
         continue; // try next model
       }
@@ -60,6 +67,7 @@ async function geminiOcr(
       const data = await res.json();
       const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (!output) {
+        lastOcrErrors.push(`${model}: empty output — ${JSON.stringify(data).slice(0, 200)}`);
         console.error(`Gemini model ${model} returned empty output`);
         continue;
       }
@@ -73,6 +81,7 @@ async function geminiOcr(
         pageCount: pageMatch ? parseInt(pageMatch[1], 10) : 1,
       };
     } catch (err) {
+      lastOcrErrors.push(`${model}: exception — ${String(err).slice(0, 200)}`);
       console.error(`Gemini model ${model} error:`, err);
       continue;
     }
@@ -124,7 +133,7 @@ export async function POST(req: NextRequest) {
       pageCount,
       wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
       estimated: true,
-      debug: { hasKey, resultWas: result ? "empty" : "null" },
+      debug: { hasKey, resultWas: result ? "empty" : "null", errors: lastOcrErrors },
     });
   } catch (error) {
     console.error("File analysis error:", error);
