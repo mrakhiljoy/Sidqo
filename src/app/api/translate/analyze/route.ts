@@ -37,7 +37,7 @@ async function geminiOcr(
         ],
       },
     ],
-    generationConfig: { maxOutputTokens: 64, temperature: 0 },
+    generationConfig: { maxOutputTokens: 1024, temperature: 0 },
   });
 
   for (const model of GEMINI_MODELS) {
