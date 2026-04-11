@@ -3,22 +3,21 @@ import { NextRequest, NextResponse } from "next/server";
 const WORDS_PER_PAGE_FALLBACK = 250;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PDF_MIME = "application/pdf";
-// Try models in order of preference — 2.5 Flash (best, free 5 RPM),
-// then 1.5 Flash (widely available), then 2.0 Flash (may have 0 RPM).
-const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-1.5-flash",
-  "gemini-2.0-flash",
-];
 
-/**
- * Gemini vision OCR — counts words and pages in PDFs and images.
- * Tries multiple model names with fallback.
- * Returns null if GEMINI_API_KEY is missing or all models fail.
- */
+// gemini-2.5-flash (5 RPM free), gemini-2.0-flash (fallback)
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 15_000; // 15s — enough to reset the per-minute quota
+
 // Collect errors from the last OCR attempt for debugging
 let lastOcrErrors: string[] = [];
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Gemini vision OCR — counts words and pages in PDFs and images.
+ * Retries on 429 (rate limit) with a delay, tries fallback models.
+ */
 async function geminiOcr(
   base64: string,
   mimeType: string
@@ -27,7 +26,6 @@ async function geminiOcr(
   lastOcrErrors = [];
   if (!key) {
     lastOcrErrors.push("GEMINI_API_KEY not set");
-    console.error("GEMINI_API_KEY not set — cannot OCR");
     return null;
   }
 
@@ -46,44 +44,60 @@ async function geminiOcr(
   });
 
   for (const model of GEMINI_MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+          }
+        );
+
+        if (res.status === 429) {
+          const msg = `${model}: 429 rate-limited (attempt ${attempt + 1}/${MAX_RETRIES + 1})`;
+          lastOcrErrors.push(msg);
+          console.error(msg);
+          if (attempt < MAX_RETRIES) {
+            await sleep(RETRY_DELAY_MS);
+            continue; // retry same model
+          }
+          break; // move to next model
         }
-      );
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "");
-        const msg = `${model}: HTTP ${res.status} — ${errText.slice(0, 200)}`;
-        lastOcrErrors.push(msg);
-        console.error(`Gemini model ${model} failed: ${res.status} ${errText.slice(0, 200)}`);
-        continue; // try next model
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          const msg = `${model}: HTTP ${res.status} — ${errText.slice(0, 200)}`;
+          lastOcrErrors.push(msg);
+          console.error(msg);
+          break; // non-retryable error, try next model
+        }
+
+        const data = await res.json();
+        const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (!output) {
+          lastOcrErrors.push(
+            `${model}: empty output — ${JSON.stringify(data).slice(0, 200)}`
+          );
+          break; // try next model
+        }
+
+        const wordMatch = output.match(/WORDS:\s*(\d+)/i);
+        const pageMatch = output.match(/PAGES:\s*(\d+)/i);
+
+        console.log(`Gemini OCR success (model: ${model}): ${output}`);
+        return {
+          wordCount: wordMatch ? parseInt(wordMatch[1], 10) : 0,
+          pageCount: pageMatch ? parseInt(pageMatch[1], 10) : 1,
+        };
+      } catch (err) {
+        lastOcrErrors.push(
+          `${model}: exception — ${String(err).slice(0, 200)}`
+        );
+        console.error(`Gemini model ${model} error:`, err);
+        break; // try next model
       }
-
-      const data = await res.json();
-      const output = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!output) {
-        lastOcrErrors.push(`${model}: empty output — ${JSON.stringify(data).slice(0, 200)}`);
-        console.error(`Gemini model ${model} returned empty output`);
-        continue;
-      }
-
-      const wordMatch = output.match(/WORDS:\s*(\d+)/i);
-      const pageMatch = output.match(/PAGES:\s*(\d+)/i);
-
-      console.log(`Gemini OCR success (model: ${model}): ${output}`);
-      return {
-        wordCount: wordMatch ? parseInt(wordMatch[1], 10) : 0,
-        pageCount: pageMatch ? parseInt(pageMatch[1], 10) : 1,
-      };
-    } catch (err) {
-      lastOcrErrors.push(`${model}: exception — ${String(err).slice(0, 200)}`);
-      console.error(`Gemini model ${model} error:`, err);
-      continue;
     }
   }
 
@@ -133,7 +147,11 @@ export async function POST(req: NextRequest) {
       pageCount,
       wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
       estimated: true,
-      debug: { hasKey, resultWas: result ? "empty" : "null", errors: lastOcrErrors },
+      debug: {
+        hasKey,
+        resultWas: result ? "empty" : "null",
+        errors: lastOcrErrors,
+      },
     });
   } catch (error) {
     console.error("File analysis error:", error);
