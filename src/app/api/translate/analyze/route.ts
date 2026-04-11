@@ -14,16 +14,51 @@ let lastOcrErrors: string[] = [];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
+/* ────────────────────────────────────────────────────────
+ * Tesseract.js OCR fallback (images only — can't read PDFs)
+ * Runs entirely in-process via WASM, no native deps.
+ * ──────────────────────────────────────────────────────── */
+async function tesseractOcr(
+  imageBuffer: Buffer
+): Promise<{ wordCount: number } | null> {
+  try {
+    // Dynamic import so the module is only loaded when needed
+    const Tesseract = await import("tesseract.js");
+    const {
+      data: { text },
+    } = await Tesseract.recognize(imageBuffer, "eng");
+
+    if (!text || !text.trim()) {
+      lastOcrErrors.push("tesseract: recognized but text was empty");
+      return null;
+    }
+
+    // Count words: split on whitespace, filter empties
+    const words = text
+      .trim()
+      .split(/\s+/)
+      .filter((w: string) => w.length > 0);
+    console.log(
+      `Tesseract OCR success: ${words.length} words (first 100 chars: ${text.slice(0, 100)})`
+    );
+    return { wordCount: words.length };
+  } catch (err) {
+    const msg = `tesseract: exception — ${String(err).slice(0, 300)}`;
+    lastOcrErrors.push(msg);
+    console.error(msg);
+    return null;
+  }
+}
+
+/* ────────────────────────────────────────────────────────
  * Gemini vision OCR — counts words and pages in PDFs and images.
  * Retries on 429 (rate limit) with a delay, tries fallback models.
- */
+ * ──────────────────────────────────────────────────────── */
 async function geminiOcr(
   base64: string,
   mimeType: string
 ): Promise<{ wordCount: number; pageCount: number } | null> {
   const key = process.env.GEMINI_API_KEY;
-  lastOcrErrors = [];
   if (!key) {
     lastOcrErrors.push("GEMINI_API_KEY not set");
     return null;
@@ -61,9 +96,9 @@ async function geminiOcr(
           console.error(msg);
           if (attempt < MAX_RETRIES) {
             await sleep(RETRY_DELAY_MS);
-            continue; // retry same model
+            continue;
           }
-          break; // move to next model
+          break;
         }
 
         if (!res.ok) {
@@ -71,7 +106,7 @@ async function geminiOcr(
           const msg = `${model}: HTTP ${res.status} — ${errText.slice(0, 200)}`;
           lastOcrErrors.push(msg);
           console.error(msg);
-          break; // non-retryable error, try next model
+          break;
         }
 
         const data = await res.json();
@@ -80,7 +115,7 @@ async function geminiOcr(
           lastOcrErrors.push(
             `${model}: empty output — ${JSON.stringify(data).slice(0, 200)}`
           );
-          break; // try next model
+          break;
         }
 
         const wordMatch = output.match(/WORDS:\s*(\d+)/i);
@@ -96,7 +131,7 @@ async function geminiOcr(
           `${model}: exception — ${String(err).slice(0, 200)}`
         );
         console.error(`Gemini model ${model} error:`, err);
-        break; // try next model
+        break;
       }
     }
   }
@@ -105,7 +140,10 @@ async function geminiOcr(
   return null;
 }
 
-// Public endpoint — no auth required
+/* ────────────────────────────────────────────────────────
+ * POST handler — public endpoint, no auth required
+ * Pipeline: Gemini → Tesseract (images only) → estimate
+ * ──────────────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -127,29 +165,43 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const base64 = buffer.toString("base64");
+    lastOcrErrors = [];
 
-    // Gemini vision handles both PDFs and images natively
-    const result = await geminiOcr(base64, file.type);
-
-    if (result && result.wordCount > 0) {
+    // ── 1. Try Gemini vision (handles PDFs + images) ──
+    const geminiResult = await geminiOcr(base64, file.type);
+    if (geminiResult && geminiResult.wordCount > 0) {
       return NextResponse.json({
-        pageCount: result.pageCount,
-        wordCount: result.wordCount,
+        pageCount: geminiResult.pageCount,
+        wordCount: geminiResult.wordCount,
         estimated: false,
+        ocrEngine: "gemini",
       });
     }
 
-    // Fallback: Gemini unavailable or returned 0
-    const pageCount = result?.pageCount || 1;
+    // ── 2. Fallback: Tesseract.js for images only ──
+    if (IMAGE_MIME_TYPES.has(file.type)) {
+      const tessResult = await tesseractOcr(buffer);
+      if (tessResult && tessResult.wordCount > 0) {
+        return NextResponse.json({
+          pageCount: 1,
+          wordCount: tessResult.wordCount,
+          estimated: false,
+          ocrEngine: "tesseract",
+        });
+      }
+    }
+
+    // ── 3. Final fallback: estimate ──
+    const pageCount = geminiResult?.pageCount || 1;
     const hasKey = !!process.env.GEMINI_API_KEY;
-    console.error(`OCR fallback used — hasKey: ${hasKey}, result:`, result);
+    console.error(`OCR fallback used — hasKey: ${hasKey}`, lastOcrErrors);
     return NextResponse.json({
       pageCount,
       wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
       estimated: true,
+      ocrEngine: "none",
       debug: {
         hasKey,
-        resultWas: result ? "empty" : "null",
         errors: lastOcrErrors,
       },
     });
