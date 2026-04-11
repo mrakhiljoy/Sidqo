@@ -1,49 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 
 const WORDS_PER_PAGE_FALLBACK = 250;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PDF_MIME = "application/pdf";
 const GEMINI_MODEL = "gemini-2.5-flash";
 
-/* ── helpers ───────────────────────────────────── */
-
-function countWords(text: string): number {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 0).length;
-}
-
 /**
- * Tier 1 — pdf-parse text extraction (fast, no external API).
- * Works for text-based PDFs. Returns 0 wordCount for scanned PDFs.
- */
-async function extractPdfText(
-  buffer: Buffer
-): Promise<{ wordCount: number; pageCount: number } | null> {
-  let parser: PDFParse | null = null;
-  try {
-    parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const info = await parser.getInfo();
-    const pageCount = info?.total || 1;
-    const textResult = await parser.getText();
-    const text = textResult?.text?.trim() || "";
-    return { wordCount: countWords(text), pageCount };
-  } catch (err) {
-    console.error("pdf-parse error (non-fatal):", err);
-    return null;
-  } finally {
-    try {
-      await parser?.destroy();
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-/**
- * Tier 2 — Gemini vision OCR (handles scanned PDFs + images natively).
+ * Gemini vision OCR — counts words and pages in PDFs and images.
  * Returns null if GEMINI_API_KEY is missing or the call fails.
  */
 async function geminiOcr(
@@ -96,8 +59,6 @@ async function geminiOcr(
   }
 }
 
-/* ── route handler ─────────────────────────────── */
-
 // Public endpoint — no auth required
 export async function POST(req: NextRequest) {
   try {
@@ -121,53 +82,22 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const base64 = buffer.toString("base64");
 
-    /* ── PDF path ──────────────────────────────── */
-    if (file.type === PDF_MIME) {
-      // Tier 1: fast text extraction (works for text-layer PDFs)
-      const pdfResult = await extractPdfText(buffer);
-      if (pdfResult && pdfResult.wordCount > 0) {
-        return NextResponse.json({
-          pageCount: pdfResult.pageCount,
-          wordCount: pdfResult.wordCount,
-          estimated: false,
-        });
-      }
+    // Gemini vision handles both PDFs and images natively
+    const result = await geminiOcr(base64, file.type);
 
-      const pageCount = pdfResult?.pageCount || 1;
-
-      // Tier 2: Gemini vision (scanned/image PDFs)
-      const gemini = await geminiOcr(base64, file.type);
-      if (gemini && gemini.wordCount > 0) {
-        return NextResponse.json({
-          pageCount: gemini.pageCount || pageCount,
-          wordCount: gemini.wordCount,
-          estimated: false,
-        });
-      }
-
-      // Fallback estimate
+    if (result && result.wordCount > 0) {
       return NextResponse.json({
-        pageCount,
-        wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
-        estimated: true,
-      });
-    }
-
-    /* ── Image path ────────────────────────────── */
-    // Gemini vision for images
-    const gemini = await geminiOcr(base64, file.type);
-    if (gemini && gemini.wordCount > 0) {
-      return NextResponse.json({
-        pageCount: 1,
-        wordCount: gemini.wordCount,
+        pageCount: result.pageCount,
+        wordCount: result.wordCount,
         estimated: false,
       });
     }
 
-    // Fallback estimate
+    // Fallback: Gemini unavailable or returned 0
+    const pageCount = result?.pageCount || 1;
     return NextResponse.json({
-      pageCount: 1,
-      wordCount: WORDS_PER_PAGE_FALLBACK,
+      pageCount,
+      wordCount: pageCount * WORDS_PER_PAGE_FALLBACK,
       estimated: true,
     });
   } catch (error) {
